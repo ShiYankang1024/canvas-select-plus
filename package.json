@@ -1,0 +1,55 @@
+{
+  "name": "canvas-select-plus",
+  "version": "2.23.2",
+  "description": "在canvas-select的基础上，添加了清空、复制、撤销、重做、隐藏、显示和鼠标样式变化等功能，尚在开发和维护中...",
+  "main": "lib/canvas-select.min.js",
+  "types": "lib/src/index.d.ts",
+  "type": "module",
+  "engines": {
+    "node": "~14||~16"
+  },
+  "scripts": {
+    "watch": "rollup -c -w",
+    "build": "rollup -c",
+    "serve": "live-server --watch=./index.html,./lib --port=9999",
+    "dev": "npm run watch & npm run serve"
+  },
+  "files": [
+    "/lib"
+  ],
+  "keywords": [
+    "canvas-select",
+    "清空",
+    "复制",
+    "撤销",
+    "重做",
+    "隐藏",
+    "显示",
+    "鼠标样式变化"
+  ],
+  "author": "heylight,sykant",
+  "license": "MIT",
+  "devDependencies": {
+    "@babel/core": "^7.14.6",
+    "@rollup/plugin-babel": "^5.3.0",
+    "@rollup/plugin-json": "^6.0.0",
+    "@typescript-eslint/eslint-plugin": "^4.28.4",
+    "@typescript-eslint/parser": "^4.28.4",
+    "live-server": "git+https://github.com/tapio/live-server.git#ad22544",
+    "rollup": "^2.53.2",
+    "rollup-plugin-sourcemaps": "^0.6.3",
+    "rollup-plugin-terser": "^7.0.2",
+    "rollup-plugin-typescript2": "^0.31.1",
+    "tslib": "^2.4.0",
+    "typescript": "^4.6.4"
+  },
+  "homepage": "https://github.com/heylight/canvas-select",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/heylight/canvas-select.git"
+  },
+  "dependencies": {
+    "@rollup/plugin-node-resolve": "^15.2.3",
+    "rfdc": "^1.4.1"
+  }
+}

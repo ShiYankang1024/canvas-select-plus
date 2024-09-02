@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0" />
+  <title>canvas-select示例</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+    }
+
+    .container {
+      background-color: #ccc;
+      width: 100%;
+      max-width: 800px;
+      height: 800px;
+    }
+
+    .right {
+      margin-left: 20px;
+    }
+
+    #output {
+      height: 450px;
+      width: 400px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="box">
+    <div class="left">
+      <canvas class="container"></canvas>
+      <div>
+        <button onclick="change(1)">创建矩形</button>
+        <button onclick="change(2)">创建多边形</button>
+        <button onclick="change(3)">创建点</button>
+        <button onclick="change(4)">创建折线</button>
+        <button onclick="change(5)">创建圆形</button>
+        <button onclick="change(6)">创建网格</button>
+        <button onclick="change(0)">取消创建</button>
+        <br />
+        <button onclick="zoom(true)">放大</button>
+        <button onclick="zoom(false)">缩小</button>
+        <button onclick="fitting()">适配</button>
+        <button onclick="focusMode()">专注模式</button>
+        <button onclick="hideShape()">隐藏</button>
+        <button onclick="showShape()">显示</button>
+        <button onclick="clearAll()">清空图形</button>
+        <button onclick="undo()">撤销</button>
+        <button onclick="redo()">重做</button>
+        <button onclick="redo()">画笔</button>
+      </div>
+      <div>
+        <span>颜色：</span>
+        <input type="color" id="colorSelect" />
+      </div>
+      <div>
+        <span>宽度：</span>
+        <input type="range" min="1" max="30" value="1" id="widthRange" />
+        <span id="widthValue">1</span>
+      </div>
+    </div>
+  </div>
+
+  <script src="./lib/canvas-select.min.js"></script>
+  <script>
+    // 获取 canvas 元素
+    const canvasElement = document.querySelector('canvas.container');
+    const output = document.getElementById('output');
+
+    const instance = new CanvasSelect('.container', 'https://n.sinaimg.cn/www/transform/300/w660h440/20240318/3875-37fb8533570d8661d3f547c7e3b0ddde.jpg');
+    instance.ctrlRadius = navigator.userAgent.includes('Mobile') ? 6 : 3;
+    window.c = instance;
+
+    let option = [
+      {
+        label: "矩形",
+        coor: [[184, 183], [275, 238]],
+        type: 1
+      },
+      {
+        label: "多边形",
+        coor: [[135, 291], [129, 319], [146, 346], [174, 365], [214, 362], [196, 337], [161, 288]],
+        type: 2
+      },
+      {
+        label: "点",
+        coor: [345, 406],
+        type: 3
+      },
+      {
+        label: "折线",
+        coor: [[470, 155], [490, 230], [493, 298]],
+        type: 4
+      },
+      {
+        label: "圆形",
+        coor: [369, 197],
+        radius: 38,
+        type: 5
+      },
+      {
+        label: "网格",
+        coor: [[419, 40], [539, 101]],
+        type: 6,
+        row: 3,
+        col: 2,
+        selected: [4]
+      },
+    ];
+
+    instance.on('load', (src) => {
+      console.log('图片加载完成', src);
+      instance.setData(option);
+    });
+
+    instance.on('warn', (msg) => {
+      console.warn('warn', msg);
+    });
+
+    instance.on('add', (info) => {
+      console.log('当前添加', info);
+      window.info = info;
+    });
+
+    instance.on('delete', (info) => {
+      console.log('当前删除', info);
+    });
+
+    instance.on('select', (info) => {
+      console.log('当前选中', info);
+    });
+
+    instance.on('updated', (result) => {
+      console.log('标注结果', result);
+      console.log("this.activeShape", this.activeShape);
+    });
+
+    instance.on('contextmenu', () => {
+      console.log('右键');
+    });
+
+    let mousedown = false;
+
+    // 添加鼠标移动事件监听器
+    if (canvasElement) {
+      const handleMouseMove = () => {
+        if (!mousedown) {
+          if (instance.hitOnShapeVertex(instance.mouse)) {
+            canvasElement.style.cursor = instance.hitOnShapeVertex(instance.mouse);
+          } else if (instance.hitOnShape(instance.mouse)[0] > -1) {
+            canvasElement.style.cursor = 'move'; // 设置为手形光标
+          } else {
+            canvasElement.style.cursor = 'default'; // 设置为默认光标
+          }
+        }
+      };
+
+      const handleMouseDown = () => {
+        mousedown = true;
+      }
+
+      const handleMouseUp = () => {
+        mousedown = false;
+      }
+
+      canvasElement.addEventListener('mousemove', handleMouseMove);
+      canvasElement.addEventListener('mousedown', handleMouseDown);
+      canvasElement.addEventListener('mouseup', handleMouseUp);
+      window.addEventListener('beforeunload', () => {
+        canvasElement.removeEventListener('mousemove', handleMouseMove);
+        canvasElement.removeEventListener('mousedown', handleMouseDown);
+        canvasElement.removeEventListener('mouseup', handleMouseUp);
+      });
+    }
+
+    function change(num) {
+      instance.createType = num;
+    }
+
+    function zoom(type) {
+      instance.setScale(type);
+    }
+
+    function fitting() {
+      instance.fitZoom();
+    }
+
+    function focusMode() {
+      instance.setFocusMode(!instance.focusMode);
+    }
+
+    function hideShape() {
+      instance.hideActiveShape(instance.activeShape.uuid)
+    }
+
+    function showShape() {
+      instance.showHiddenShape();
+    }
+
+    function clearAll() {
+      instance.deleteAllShape();
+    }
+
+    function undo() {
+      instance.undo();
+      console.log('instance.hideList.length', instance.hideList.length)
+      console.log('instance.focusMode', instance.focusMode)
+    }
+
+    function redo() {
+      instance.redo();
+      console.log('instance.hideList.length', instance.hideList.length)
+      console.log('instance.focusMode', instance.focusMode)
+    }
+
+    function changeData() {
+      const data = JSON.parse(output.value);
+      instance.setData(data);
+    }
+  </script>
+</body>
+
+</html>
