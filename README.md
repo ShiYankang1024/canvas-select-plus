@@ -2,11 +2,11 @@
 
 核心架构请查阅canvas-select组件，一个用于图片标注的 javascript 库，基于 canvas，简单轻量，支持矩形、多边形、点、折线、圆形标注、网格标注。
 
-[![NPM version](https://img.shields.io/npm/v/canvas-select.svg?style=flat)](https://npmjs.org/package/canvas-select-plus)
+[![NPM version](https://img.shields.io/npm/v/canvas-select-plus.svg?style=flat)](https://npmjs.org/package/canvas-select-plus)
 
 
 
-![图例](https://cdn.jsdelivr.net/npm/@heylight/cdn@%5E1/img/demo.png)
+![图例](https://github.com/DongMenKant/canvas-select-plus/blob/main/index.png)
 
 ## 简介
 
