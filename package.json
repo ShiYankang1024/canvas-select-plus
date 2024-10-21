@@ -1,6 +1,6 @@
 {
   "name": "canvas-select-plus",
-  "version": "2.23.2",
+  "version": "2.23.14",
   "description": "在canvas-select的基础上，添加了清空、复制、撤销、重做、隐藏、显示和鼠标样式变化等功能，尚在开发和维护中...",
   "main": "lib/canvas-select.min.js",
   "types": "lib/src/index.d.ts",
@@ -25,7 +25,8 @@
     "重做",
     "隐藏",
     "显示",
-    "鼠标样式变化"
+    "鼠标样式变化",
+    "画笔（测试）"
   ],
   "author": "heylight,sykant",
   "license": "MIT",
@@ -43,10 +44,10 @@
     "tslib": "^2.4.0",
     "typescript": "^4.6.4"
   },
-  "homepage": "https://github.com/heylight/canvas-select",
+  "homepage": "https://github.com/DongMenKant/canvas-select-plus",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/heylight/canvas-select.git"
+    "url": "git+https://github.com/DongMenKant/canvas-select-plus.git"
   },
   "dependencies": {
     "@rollup/plugin-node-resolve": "^15.2.3",

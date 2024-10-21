@@ -5,7 +5,9 @@ interface ShapeProp {
     [key: string]: any
 }
 export default class Shape {
-    /** 标签 */
+    /** 标签id */
+    public tagId: string = ''
+    /** 标签名称 */
     public label: string = ''
     /** 是否隐藏标签 */
     public hideLabel: boolean

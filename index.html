@@ -18,6 +18,28 @@
       height: 800px;
     }
 
+    #canvas {
+      position: absolute;
+      border: 1px solid black;
+      width: 800px;
+      height: 800px;
+    }
+
+
+    #image-canvas {
+      position: absolute;
+      width: 800px;
+      height: 800px;
+      z-index: -1;
+    }
+
+    #temp-canvas {
+      position: absolute;
+      width: 800px;
+      height: 800px;
+      z-index: 1;
+    }
+
     .right {
       margin-left: 20px;
     }
@@ -26,14 +48,27 @@
       height: 450px;
       width: 400px;
     }
+    
   </style>
 </head>
 
 <body>
   <div class="box">
-    <div class="left">
-      <canvas class="container"></canvas>
-      <div>
+    <div>
+      <canvas id="canvas" class="container"></canvas>
+      <canvas id="image-canvas"></canvas>
+      <canvas id="temp-canvas" style="pointer-events: none;"></canvas>
+
+      <ul
+        v-if="menuVisible"
+        :style="{ top: menuPosition.y + 'px', left: menuPosition.x + 'px' }"
+        class="context-menu"
+      >
+        <li @click="menuVisible = false">选项 1</li>
+        <li @click="menuVisible = false">选项 2</li>
+        <li @click="menuVisible = false">选项 3</li>
+      </ul>
+      <div style="position: absolute;">
         <button onclick="change(1)">创建矩形</button>
         <button onclick="change(2)">创建多边形</button>
         <button onclick="change(3)">创建点</button>
@@ -51,7 +86,9 @@
         <button onclick="clearAll()">清空图形</button>
         <button onclick="undo()">撤销</button>
         <button onclick="redo()">重做</button>
-        <button onclick="redo()">画笔</button>
+        <button onclick="change(7)">画笔</button>
+        <button onclick="changeCanvas()">扩大画布</button>
+        <button onclick="saveImage()">保存图片</button>
       </div>
       <div>
         <span>颜色：</span>
@@ -71,50 +108,66 @@
     const canvasElement = document.querySelector('canvas.container');
     const output = document.getElementById('output');
 
-    const instance = new CanvasSelect('.container', 'https://n.sinaimg.cn/www/transform/300/w660h440/20240318/3875-37fb8533570d8661d3f547c7e3b0ddde.jpg');
+    const instance = new CanvasSelect('.container', 'https://aircas.icu/admin/sys-file/dataset/%E6%B5%8B%E8%AF%95%E5%9F%BA%E7%A1%80%E6%95%B0%E6%8D%AE%E9%9B%860821/base/train/daisy/3d094775c1f2481abcfab389779fd9c7.jpg');
     instance.ctrlRadius = navigator.userAgent.includes('Mobile') ? 6 : 3;
     window.c = instance;
 
-    let option = [
-      {
-        label: "矩形",
-        coor: [[184, 183], [275, 238]],
-        type: 1
-      },
-      {
-        label: "多边形",
-        coor: [[135, 291], [129, 319], [146, 346], [174, 365], [214, 362], [196, 337], [161, 288]],
-        type: 2
-      },
-      {
-        label: "点",
-        coor: [345, 406],
-        type: 3
-      },
-      {
-        label: "折线",
-        coor: [[470, 155], [490, 230], [493, 298]],
-        type: 4
-      },
-      {
-        label: "圆形",
-        coor: [369, 197],
-        radius: 38,
-        type: 5
-      },
-      {
-        label: "网格",
-        coor: [[419, 40], [539, 101]],
-        type: 6,
-        row: 3,
-        col: 2,
-        selected: [4]
-      },
-    ];
+    // for drawer
+    const canvas = document.getElementById('canvas');
+    const context = canvas.getContext('2d');
+    // for image
+    const imageCanvas = document.getElementById('image-canvas');
+    const imageContext = imageCanvas.getContext('2d');
+    imageCanvas.style.zIndex = -1;
+    // for rect real-time visualization
+    const tempCanvas = document.getElementById('temp-canvas');
+    const tempContext = tempCanvas.getContext('2d');
+    tempCanvas.style.zIndex = 1;
+    // for image-size mask canvas
+    const maskcanvas = document.createElement('canvas');
+    const maskcontext = maskcanvas.getContext('2d');
+
+
+    // let option = [
+    //   {
+    //     label: "矩形",
+    //     coor: [[184, 183], [275, 238]],
+    //     type: 1
+    //   },
+    //   {
+    //     label: "多边形",
+    //     coor: [[135, 291], [129, 319], [146, 346], [174, 365], [214, 362], [196, 337], [161, 288]],
+    //     type: 2
+    //   },
+    //   {
+    //     label: "点",
+    //     coor: [345, 406],
+    //     type: 3
+    //   },
+    //   {
+    //     label: "折线",
+    //     coor: [[470, 155], [490, 230], [493, 298]],
+    //     type: 4
+    //   },
+    //   {
+    //     label: "圆形",
+    //     coor: [369, 197],
+    //     radius: 38,
+    //     type: 5
+    //   },
+    //   {
+    //     label: "网格",
+    //     coor: [[419, 40], [539, 101]],
+    //     type: 6,
+    //     row: 3,
+    //     col: 2,
+    //     selected: [4]
+    //   },
+    // ];
 
     instance.on('load', (src) => {
       console.log('图片加载完成', src);
-      instance.setData(option);
+      // instance.setData(option);
     });
 
     instance.on('warn', (msg) => {
@@ -167,18 +220,28 @@
         mousedown = false;
       }
 
+      const handleRightClick = () => {
+        if (instance.activeShape && instance.hitOnShape(instance.mouse)[0] > -1) {
+          <!-- 右键菜单 -->
+
+        }
+      };
+
       canvasElement.addEventListener('mousemove', handleMouseMove);
       canvasElement.addEventListener('mousedown', handleMouseDown);
       canvasElement.addEventListener('mouseup', handleMouseUp);
+      canvasElement.addEventListener('contextmenu', handleRightClick);
       window.addEventListener('beforeunload', () => {
         canvasElement.removeEventListener('mousemove', handleMouseMove);
         canvasElement.removeEventListener('mousedown', handleMouseDown);
         canvasElement.removeEventListener('mouseup', handleMouseUp);
+        canvasElement.removeEventListener('contextmenu', handleRightClick);
       });
     }
 
     function change(num) {
       instance.createType = num;
+      console.log("instance.createType", instance.createType);
     }
 
     function zoom(type) {
@@ -220,6 +283,21 @@
     function changeData() {
       const data = JSON.parse(output.value);
       instance.setData(data);
+    }
+
+    function changeCanvas(){
+      instance.resize(500, 500);
+    }
+
+    function saveImage() {
+      // 获取 Canvas 上的内容并转换为数据 URL
+      const imageDataUrl = this.canvas.toDataURL('image/png');
+
+      // 创建一个下载链接并触发下载
+      const downloadLink = document.createElement('a');
+      downloadLink.href = imageDataUrl;
+      downloadLink.download = 'canvas_image.png'; // 设定下载的文件名
+      downloadLink.click();
     }
   </script>
 </body>

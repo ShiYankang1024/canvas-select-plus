@@ -5,6 +5,7 @@ import EventBus from './EventBus';
 import Line from './shape/Line';
 import Circle from './shape/Circle';
 import Grid from './shape/Grid';
+import Brush from './shape/Brush';
 import pkg from '../package.json';
 import { isNested, createUuid, deepClone, deepEqual } from "./tools";
 
@@ -17,7 +18,8 @@ enum Shape {
     Dot,
     Line,
     Circle,
-    Grid
+    Grid,
+    Brush
 }
 export default class CanvasSelect extends EventBus {
     /** 当前版本 */
@@ -39,9 +41,9 @@ export default class CanvasSelect extends EventBus {
     /** 边线宽度 */
     lineWidth = 2;
     /** 当前选中的标注边线颜色 */
-    activeStrokeStyle = '#f00';
+    activeStrokeStyle = 'rgba(0, 0, 255, 1)';
     /** 当前选中的标注填充颜色 */
-    activeFillStyle = '#6BC7FF';
+    activeFillStyle = 'rgba(0, 0, 255, 0.5)';
     /** 控制点边线颜色 */
     ctrlStrokeStyle = '#000';
     /** 控制点填充颜色 */
@@ -51,17 +53,19 @@ export default class CanvasSelect extends EventBus {
     /** 是否隐藏标签 */
     hideLabel = false;
     /** 标签背景填充颜色 */
-    labelFillStyle = '#fff';
+    labelFillStyle = 'rgba(255, 255, 255, 0.5)';
     /** 标签字体 */
-    labelFont = '20px sans-serif';
+    labelFont = '12px sans-serif';
     /** 标签文字颜色 */
-    textFillStyle = '#000';
+    textFillStyle = '#FFFFFF';
     /** 标签字符最大长度，超出使用省略号 */
     labelMaxLen = 10;
     /** 画布宽度 */
     WIDTH = 0;
     /** 画布高度 */
     HEIGHT = 0;
+    /** 背景图src */
+    imagesrc = '';
 
     canvas: HTMLCanvasElement;
 
@@ -79,6 +83,9 @@ export default class CanvasSelect extends EventBus {
 
     /** 记录所有隐藏图形的uuid*/
     hideList: string[] = [];
+
+    /** 记录brush的轨迹*/
+    drawingHistory: string[] = [];
 
     offScreen: HTMLCanvasElement;
 
@@ -143,10 +150,12 @@ export default class CanvasSelect extends EventBus {
     ispainting = false;
 
     /** 初始化brush线条样式 */
-    brushlineCap = "round";//线段末端为圆形
-    brushlineJoin = "round";//两线段连接处为圆形
-    brushlineWidth = 1;
+    // brushlineCap = "round";//线段末端为圆形
+    // brushlineJoin = "round";//两线段连接处为圆形
+    brushlineWidth = 5;
     brushstrokeStyle = "#000";
+
+    brushPoints: [number, number][] = [];
 
 
 
@@ -169,6 +178,7 @@ export default class CanvasSelect extends EventBus {
         if (container instanceof HTMLCanvasElement) {
             this.canvas = container;
             this.offScreen = document.createElement('canvas');
+            this.imagesrc = src;
             this.initSetting();
             this.initEvents();
             src && this.setImage(src);
@@ -306,6 +316,13 @@ export default class CanvasSelect extends EventBus {
                         case Shape.Grid:
                             newShape = new Grid({ coor: [curPoint, curPoint] }, this.dataset.length);
                             newShape.creating = true;
+                            break;
+                        case Shape.Brush:
+                            newShape = new Brush({ coor: [curPoint] }, this.dataset.length);
+                            newShape.creating = true;
+                            this.ispainting = true;
+                            this.ctx.beginPath();
+                            this.ctx.moveTo(this.mouse[0], this.mouse[1]); // 将一个新的子路径的起始点移动到 (x，y) 坐标
                             break;
                         default:
                             break;
@@ -469,7 +486,14 @@ export default class CanvasSelect extends EventBus {
                     const [x0, y0] = this.activeShape.coor;
                     const r = Math.sqrt((x0 - x) ** 2 + (y0 - y) ** 2);
                     this.activeShape.radius = r;
-                }
+                } 
+                else if(this.ispainting && this.createType === Shape.Brush){
+                    this.ctx.lineWidth = this.brushlineWidth;
+                    this.ctx.strokeStyle = this.brushstrokeStyle;
+                    this.ctx.lineTo(this.mouse[0], this.mouse[1]); // 使用直线连接子路径的终点到 x，y 坐标的方法（并不会真正地绘制）
+                    // this.ctx.fill();
+                    this.ctx.stroke(); // 根据当前的画线样式，绘制当前或已经存在的路径的方法
+                } 
             }
             this.update();
         } else if ([Shape.Polygon, Shape.Line].includes(this.activeShape.type) && this.activeShape.creating) {
@@ -488,6 +512,7 @@ export default class CanvasSelect extends EventBus {
             this.scaleTouchStore = Math.abs((touch1.clientX - touch0.clientX) * (touch1.clientY - touch0.clientY));
             this.setScale(this.scaleTouchStore > cur, true);
         }
+        
     }
 
     private handleMouseUp(e: MouseEvent | TouchEvent) {
@@ -526,6 +551,16 @@ export default class CanvasSelect extends EventBus {
                         this.activeShape.creating = false;
                         this.emit('add', this.activeShape);
                     }
+                }
+                else if(this.createType === Shape.Brush){
+                    this.ctx.lineWidth = this.lineWidth;
+                    this.ctx.strokeStyle = this.strokeStyle;
+                    this.ispainting = false;
+                    this.activeShape.creating = false;
+                    this.ctx.closePath(); // 将笔点返回到当前子路径起始点的方法
+                    // console.log('this.canvas.toDataURL()', this.canvas.toDataURL())
+                    // this.doneList.push(deepClone(this.dataset)); // 存储当前 Canvas 状态
+                    // this.drawingHistory.push(this.canvas.toDataURL()); // 存储当前 Canvas 状态
                 }
                 this.update();
             }
@@ -634,6 +669,8 @@ export default class CanvasSelect extends EventBus {
      * @param url 图片链接
      */
     setImage(url: string) {
+        // 解决问题：Failed to execute 'toDataURL' on 'HTMLCanvasElement': Tainted canvases may not be exported.
+        this.image.crossOrigin = 'Anonymous';
         this.image.src = url;
     }
 
@@ -975,14 +1012,15 @@ export default class CanvasSelect extends EventBus {
         const [[x0, y0], [x1, y1]] = coor.map((a: Point) => a.map((b) => Math.round(b * this.scale)));
         this.ctx.save();
         this.ctx.lineWidth = lineWidth || this.lineWidth;
-        this.ctx.fillStyle = sub?.isSelected ? sub?.selectedFillStyle : (fillStyle || this.fillStyle);
+        this.ctx.fillStyle = (active || creating) ? this.activeFillStyle : (fillStyle || this.fillStyle);
         this.ctx.strokeStyle = (active || creating) ? this.activeStrokeStyle : (strokeStyle || this.strokeStyle);
         const w = x1 - x0;
         const h = y1 - y0;
         if (!creating) this.ctx.fillRect(x0, y0, w, h);
         this.ctx.strokeRect(x0, y0, w, h);
         this.ctx.restore();
-        this.drawLabel(coor[0], shape);
+        let center = [(coor[1][0]+coor[0][0])/2, (coor[1][1]+coor[0][1])/2];
+        this.drawLabel(center as Point, shape);
     }
 
     /**
@@ -994,7 +1032,7 @@ export default class CanvasSelect extends EventBus {
         this.ctx.save();
         this.ctx.lineJoin = 'round';
         this.ctx.lineWidth = lineWidth || this.lineWidth;
-        this.ctx.fillStyle = fillStyle || this.fillStyle;
+        this.ctx.fillStyle = (active || creating) ? this.activeFillStyle : (fillStyle || this.fillStyle);
         this.ctx.strokeStyle = (active || creating) ? this.activeStrokeStyle : (strokeStyle || this.strokeStyle);
         this.ctx.beginPath();
         coor.forEach((el: Point, i) => {
@@ -1014,7 +1052,7 @@ export default class CanvasSelect extends EventBus {
         this.ctx.fill();
         this.ctx.stroke();
         this.ctx.restore();
-        this.drawLabel(coor[0], shape);
+        this.drawLabel(this.calculateCenter(coor), shape);
     }
 
     /**
@@ -1026,7 +1064,7 @@ export default class CanvasSelect extends EventBus {
         const [x, y] = coor.map((a) => a * this.scale);
         this.ctx.save();
         this.ctx.lineWidth = lineWidth || this.lineWidth;
-        this.ctx.fillStyle = fillStyle || this.ctrlFillStyle;
+        this.ctx.fillStyle = active ? this.activeFillStyle : (fillStyle || this.ctrlFillStyle);
         this.ctx.strokeStyle = active ? this.activeStrokeStyle : (strokeStyle || this.strokeStyle);
         this.ctx.beginPath();
         this.ctx.arc(x, y, this.ctrlRadius, 0, 2 * Math.PI, true);
@@ -1046,7 +1084,7 @@ export default class CanvasSelect extends EventBus {
         const [x, y] = coor.map((a) => a * this.scale);
         this.ctx.save();
         this.ctx.lineWidth = lineWidth || this.lineWidth;
-        this.ctx.fillStyle = fillStyle || this.fillStyle;
+        this.ctx.fillStyle = (active || creating) ? this.activeFillStyle : (fillStyle || this.fillStyle);
         this.ctx.strokeStyle = (active || creating) ? this.activeStrokeStyle : (strokeStyle || this.strokeStyle);
         this.ctx.beginPath();
         this.ctx.arc(x, y, radius * this.scale, 0, 2 * Math.PI, true);
@@ -1054,7 +1092,7 @@ export default class CanvasSelect extends EventBus {
         this.ctx.arc(x, y, radius * this.scale, 0, 2 * Math.PI, true);
         this.ctx.stroke();
         this.ctx.restore();
-        this.drawLabel(ctrlsData[0] as Point, shape);
+        this.drawLabel(shape.coor as Point, shape);
     }
 
     /**
@@ -1096,7 +1134,7 @@ export default class CanvasSelect extends EventBus {
         const [[x0, y0], [x1, y1]] = coor.map((a: Point) => a.map((b) => Math.round(b * this.scale)));
         this.ctx.save();
         this.ctx.lineWidth = lineWidth || this.lineWidth;
-        this.ctx.fillStyle = fillStyle || this.fillStyle;
+        this.ctx.fillStyle = (active || creating) ? this.activeFillStyle : (fillStyle || this.fillStyle);
         this.ctx.strokeStyle = (active || creating) ? this.activeStrokeStyle : (strokeStyle || this.strokeStyle);
         shape.gridRects.forEach((rect: Rect, m) => {
             this.drawRect(rect, {
@@ -1143,6 +1181,26 @@ export default class CanvasSelect extends EventBus {
         });
     }
 
+
+    // 计算多个坐标的中心位置
+    calculateCenter(points: [number, number][]): [number, number] {
+        if (points.length === 0) {
+            throw new Error('Points array cannot be empty.');
+        }
+    
+        const sum = points.reduce((acc, [x, y]) => {
+            acc[0] += x;  // 累加 x 坐标
+            acc[1] += y;  // 累加 y 坐标
+            return acc;
+        }, [0, 0]);
+    
+        const centerX = sum[0] / points.length;  // 计算平均 x 坐标
+        const centerY = sum[1] / points.length;  // 计算平均 y 坐标
+    
+        return [centerX, centerY] as Point;  // 返回中心坐标
+    }
+
+
     /**
      * 绘制label
      * @param point 位置
@@ -1163,17 +1221,55 @@ export default class CanvasSelect extends EventBus {
             const font = parseInt(this.ctx.font) - 4;
             const labelWidth = text.width + textPaddingLeft * 2;
             const labelHeight = font + textPaddingTop * 2;
-            const [x, y] = point.map((a) => a * this.scale);
+            let [x, y] = point.map((a) => a * this.scale);
+            // 以point为中心创建label
+            if(shape.type===1||shape.type===2||shape.type===5){
+                x = (x-(labelWidth)/2*this.scale);
+                y = (y-(labelHeight)/2*this.scale);
+            }
             const toleft = (this.IMAGE_ORIGIN_WIDTH - point[0]) < labelWidth / this.scale;
             const toTop = (this.IMAGE_ORIGIN_HEIGHT - point[1]) < labelHeight / this.scale;
             const toTop2 = point[1] > labelHeight / this.scale;
             const isup = isLabelUp ? toTop2 : toTop;
             this.ctx.save();
+
+            // 设置矩形样式
             this.ctx.fillStyle = labelFillStyle || this.labelFillStyle;
-            this.ctx.fillRect(toleft ? (x - text.width - textPaddingLeft - currLineWidth / 2) : (x + currLineWidth / 2), isup ? (y - labelHeight - currLineWidth / 2) : (y + currLineWidth / 2), labelWidth, labelHeight);
+            
+            // 绘制矩形，考虑缩放因子
+            const rectX = toleft ? (x - text.width - textPaddingLeft - currLineWidth / 2) : (x + currLineWidth / 2);
+            const rectY = isup ? (y - labelHeight - currLineWidth / 2) : (y + currLineWidth / 2);
+            const rectWidth = labelWidth * this.scale;
+            const rectHeight = labelHeight * this.scale;
+            
+            this.ctx.fillRect(rectX, rectY, rectWidth, rectHeight);
+            
+            // 设置文本样式并考虑缩放
+            const scaledFontSize = font * this.scale;  // 根据缩放因子调整字体大小
+            this.ctx.font = `${scaledFontSize}px sans-serif`;  // 更新字体大小
+
             this.ctx.fillStyle = textFillStyle || this.textFillStyle;
-            this.ctx.fillText(newText, toleft ? (x - text.width) : (x + textPaddingLeft + currLineWidth / 2), isup ? (y - labelHeight + font + textPaddingTop) : (y + font + textPaddingTop + currLineWidth / 2), 180);
-            this.ctx.restore();
+
+            // 获取文本的实际宽度，用于居中计算
+            const textWidth = this.ctx.measureText(newText).width;
+
+            // 获取文本的实际高度，用于垂直居中计算
+            const textMetrics = this.ctx.measureText(newText);
+            const textHeight = textMetrics.fontBoundingBoxAscent + textMetrics.fontBoundingBoxDescent;
+
+            // 设置文本的基线对齐方式为中间
+            this.ctx.textBaseline = 'top';  // 设置基线为顶部，便于精确控制位置
+
+            // 计算文本的横向和纵向居中位置
+            const textX = rectX + (rectWidth - textWidth) / 2;  // 横向居中
+            const textY = rectY + (rectHeight - textHeight) / 2;  // 垂直居中，基于矩形的中间位置减去文本高度的一半
+
+            // 绘制居中的文本，考虑缩放
+            this.ctx.fillText(newText, textX, textY, rectWidth);
+
+            
+            // 恢复上下文
+            this.ctx.restore();  
         }
     }
 
@@ -1181,6 +1277,9 @@ export default class CanvasSelect extends EventBus {
      * 更新画布
      */
     update() {
+        if ([Shape.Brush].includes(this.activeShape.type) && !this.activeShape.hiddening) {
+            return;
+        }
         window.cancelAnimationFrame(this.timer);
         this.timer = window.requestAnimationFrame(() => {
             this.ctx.save();
@@ -1212,6 +1311,8 @@ export default class CanvasSelect extends EventBus {
                         break;
                     case Shape.Grid:
                         this.drawGrid(shape as Grid);
+                        break;
+                    case Shape.Brush:
                         break;
                     default:
                         break;
@@ -1282,25 +1383,39 @@ export default class CanvasSelect extends EventBus {
 
     /**
      * 修改选中图像的标注信息
-     * @param label string
+     * @param tagId string
      * @param label string
      * @param color string
      */
-    updateLabelByIndex(index: number, label: string, color: string) {
+    updateLabelByIndex(index: number, tagId: string, label: string, color: string, properties: string[]) {
+        const updateProperties = (item: any) => {
+            properties.forEach(prop => {
+                if (prop === 'label') {
+                    item.label = label;
+                } else if (prop === 'tagId') {
+                    item.tagId = tagId;
+                } else if (prop === 'strokeStyle') {
+                    item.strokeStyle = color;
+                } else if (prop === 'textFillStyle') {
+                    item.textFillStyle = color;
+                } else if (prop === 'fillStyle') {
+                    item.fillStyle = color;
+                }
+            });
+        };
+    
         if (index !== -1) {
-            this.dataset[index].label = label;
-            this.dataset[index].strokeStyle = color;
-            this.dataset[index].textFillStyle = color;
+            updateProperties(this.dataset[index]);
         } else {
             if (this.activeShape) {
-                this.activeShape.label = label;
-                this.activeShape.strokeStyle = color;
-                this.activeShape.textFillStyle = color;
+                updateProperties(this.activeShape);
             }
         }
+    
         this.update();
         this.doneList.push(deepClone(this.dataset));
     }
+    
 
     /**
      * 删除画布中创建的所有图形
@@ -1534,6 +1649,18 @@ export default class CanvasSelect extends EventBus {
             this.undoList.push(lastDoneItem);
             this.doneList.pop();
             this.dataset = this.doneList[this.doneList.length - 1];
+            // if(this.dataset.some(item => item.type === 7)){
+            //     this.drawingHistory.pop();
+            //     this.deleteAllShape();
+            //     const dataURL = this.drawingHistory[this.drawingHistory.length - 1];
+            //     const img = new Image();
+            //     img.src = dataURL;
+            //     img.onload = () => {
+            //         this.ctx.drawImage(img, 0, 0);
+            //     };
+            // }else{
+            //     this.setData(this.dataset);
+            // }
             this.setData(this.dataset);
         }
     }
@@ -1578,12 +1705,14 @@ export default class CanvasSelect extends EventBus {
     /**
      * 重新设置画布大小
      */
-    resize() {
-        this.canvas.width = null;
-        this.canvas.height = null;
-        this.canvas.style.width = null;
-        this.canvas.style.height = null;
+    resize(width: number, height: number) {
+        this.canvas.width = width;
+        this.canvas.height = height;
+        this.canvas.style.width = String(width) + 'px';
+        this.canvas.style.height = String(height) + 'px';
+        this.setImage(this.imagesrc);
         this.initSetting();
         this.update();
     }
+
 }
