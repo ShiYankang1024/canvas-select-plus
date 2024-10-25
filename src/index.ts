@@ -700,7 +700,7 @@ export default class CanvasSelect extends EventBus {
      */
     setImage(url: string) {
         // 解决问题：Failed to execute 'toDataURL' on 'HTMLCanvasElement': Tainted canvases may not be exported.
-        this.image.crossOrigin = 'Anonymous';
+        // this.image.crossOrigin = 'Anonymous';
         this.image.src = url;
     }
 

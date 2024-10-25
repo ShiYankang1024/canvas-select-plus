@@ -1,6 +1,6 @@
 {
   "name": "canvas-select-plus",
-  "version": "2.23.15",
+  "version": "2.23.16",
   "description": "在canvas-select的基础上，添加了清空、复制、撤销、重做、隐藏、显示和鼠标样式变化等功能，尚在开发和维护中...",
   "main": "lib/canvas-select.min.js",
   "types": "lib/src/index.d.ts",
@@ -26,7 +26,8 @@
     "隐藏",
     "显示",
     "鼠标样式变化",
-    "画笔（测试）"
+    "画笔、橡皮檫（测试）",
+    "保存图片（关闭）"
   ],
   "author": "heylight,sykant",
   "license": "MIT",
