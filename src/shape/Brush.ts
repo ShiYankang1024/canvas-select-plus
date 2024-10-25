@@ -5,4 +5,8 @@ export default class Brush extends Shape {
   constructor(item: any, index: number) {
     super(item, index)
   }
+
+  get ctrlsData() {
+    return this.coor.length > 3 ? this.coor : [];
+  }
 }

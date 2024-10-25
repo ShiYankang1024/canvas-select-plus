@@ -13,30 +13,38 @@
 
     .container {
       background-color: #ccc;
-      width: 100%;
-      max-width: 800px;
-      height: 800px;
+      width: 1361px;
+      height: 565px;
     }
 
     #canvas {
       position: absolute;
       border: 1px solid black;
-      width: 800px;
-      height: 800px;
+      width: 100%;
+      height: 100%;
     }
 
+    /* 自定义圆形光标 */
+    #customCursor {
+      position: absolute;
+      pointer-events: none;  /* 禁止光标捕获点击事件 */
+      border-radius: 50%;    /* 圆形 */
+      background-color: rgba(0, 0, 0, 0.5);  /* 半透明黑色 */
+      transform: translate(-50%, -50%);  /* 将光标居中 */
+      z-index: 10; /* 确保光标位于画布上方 */
+    }
 
     #image-canvas {
       position: absolute;
-      width: 800px;
-      height: 800px;
+      width: 100%;
+      height: 100%;
       z-index: -1;
     }
 
     #temp-canvas {
       position: absolute;
-      width: 800px;
-      height: 800px;
+      width: 100%;
+      height: 100%;
       z-index: 1;
     }
 
@@ -58,6 +66,9 @@
       <canvas id="canvas" class="container"></canvas>
       <canvas id="image-canvas"></canvas>
       <canvas id="temp-canvas" style="pointer-events: none;"></canvas>
+
+      <!-- 自定义圆形光标 -->
+      <div id="customCursor"></div>
 
       <ul
         v-if="menuVisible"
@@ -86,18 +97,21 @@
         <button onclick="clearAll()">清空图形</button>
         <button onclick="undo()">撤销</button>
         <button onclick="redo()">重做</button>
-        <button onclick="change(7)">画笔</button>
+        <button onclick="change(7)">画笔</button>        
+        <button onclick="eraser()">橡皮擦</button>
+        <button onclick="nocolor()">透明色</button>
         <button onclick="changeCanvas()">扩大画布</button>
         <button onclick="saveImage()">保存图片</button>
+        <div>
+          <span>颜色：</span>
+          <input type="color" id="colorSelect" onchange="handleColorChange(this)"/>
+        </div>
+        <div>
+          <span>宽度：</span>
+          <input type="range" min="1" max="20" value="1" id="widthRange" onchange="handleWidthChange(this)"/>
+          <span id="widthValue">1</span>
+        </div>
       </div>
-      <div>
-        <span>颜色：</span>
-        <input type="color" id="colorSelect" />
-      </div>
-      <div>
-        <span>宽度：</span>
-        <input type="range" min="1" max="30" value="1" id="widthRange" />
-        <span id="widthValue">1</span>
       </div>
     </div>
   </div>
@@ -106,9 +120,12 @@
   <script>
     // 获取 canvas 元素
     const canvasElement = document.querySelector('canvas.container');
+    const customCursor = document.getElementById('customCursor');
     const output = document.getElementById('output');
 
-    const instance = new CanvasSelect('.container', 'https://aircas.icu/admin/sys-file/dataset/%E6%B5%8B%E8%AF%95%E5%9F%BA%E7%A1%80%E6%95%B0%E6%8D%AE%E9%9B%860821/base/train/daisy/3d094775c1f2481abcfab389779fd9c7.jpg');
+    const instance = new CanvasSelect('.container', 'https://aircas.icu/admin/sys-file/dataset/%E6%B5%8B%E8%AF%95%E5%9F%BA%E7%A1%80%E6%95%B0%E6%8D%AE%E9%9B%860821/base/train/daisy/9b6ce812c8054349906b24917a4d65c4.jpg');
+    // const instance = new CanvasSelect('.container', 'https://cdn.pixabay.com/photo/2023/11/03/12/22/toadstool-8362901_1280.jpg');
+    
     instance.ctrlRadius = navigator.userAgent.includes('Mobile') ? 6 : 3;
     window.c = instance;
 
@@ -126,48 +143,59 @@
     // for image-size mask canvas
     const maskcanvas = document.createElement('canvas');
     const maskcontext = maskcanvas.getContext('2d');
+    
+    // 处理颜色选择器的 change 事件
+    function handleColorChange(input) {
+      instance.brushstrokeStyle = input.value;
+      // instance.activebrushstrokeStyle = input.value;
+    }
 
-
-    // let option = [
-    //   {
-    //     label: "矩形",
-    //     coor: [[184, 183], [275, 238]],
-    //     type: 1
-    //   },
-    //   {
-    //     label: "多边形",
-    //     coor: [[135, 291], [129, 319], [146, 346], [174, 365], [214, 362], [196, 337], [161, 288]],
-    //     type: 2
-    //   },
-    //   {
-    //     label: "点",
-    //     coor: [345, 406],
-    //     type: 3
-    //   },
-    //   {
-    //     label: "折线",
-    //     coor: [[470, 155], [490, 230], [493, 298]],
-    //     type: 4
-    //   },
-    //   {
-    //     label: "圆形",
-    //     coor: [369, 197],
-    //     radius: 38,
-    //     type: 5
-    //   },
-    //   {
-    //     label: "网格",
-    //     coor: [[419, 40], [539, 101]],
-    //     type: 6,
-    //     row: 3,
-    //     col: 2,
-    //     selected: [4]
-    //   },
-    // ];
+    // 处理宽度选择器的 change 事件
+    function handleWidthChange(input) {
+      instance.brushlineWidth = parseInt(input.value, 10);
+      document.getElementById('widthValue').textContent = input.value;
+      setCursorRadius(instance.brushlineWidth);
+    }
+    let option = [
+      {
+        label: "矩形",
+        coor: [[150, 150], [275, 275]],
+        type: 1
+      },
+      // {
+      //   label: "多边形",
+      //   coor: [[135, 291], [129, 319], [146, 346], [174, 365], [214, 362], [196, 337], [161, 288]],
+      //   type: 2
+      // },
+      // {
+      //   label: "点",
+      //   coor: [345, 406],
+      //   type: 3
+      // },
+      // {
+      //   label: "折线",
+      //   coor: [[470, 155], [490, 230], [493, 298]],
+      //   type: 4
+      // },
+      // {
+      //   label: "圆形",
+      //   coor: [369, 197],
+      //   radius: 38,
+      //   type: 5
+      // },
+      // {
+      //   label: "网格",
+      //   coor: [[419, 40], [539, 101]],
+      //   type: 6,
+      //   row: 3,
+      //   col: 2,
+      //   selected: [4]
+      // },
+    ];
 
     instance.on('load', (src) => {
       console.log('图片加载完成', src);
-      // instance.setData(option);
+      instance.setData(option);
     });
 
     instance.on('warn', (msg) => {
@@ -200,14 +228,27 @@
 
     // 添加鼠标移动事件监听器
     if (canvasElement) {
-      const handleMouseMove = () => {
+      const handleMouseMove = (e) => {
+        const rect = canvasElement.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+
+        // 更新自定义光标位置
+        customCursor.style.left = `${x}px`;
+        customCursor.style.top = `${y}px`;
         if (!mousedown) {
           if (instance.hitOnShapeVertex(instance.mouse)) {
             canvasElement.style.cursor = instance.hitOnShapeVertex(instance.mouse);
           } else if (instance.hitOnShape(instance.mouse)[0] > -1) {
-            canvasElement.style.cursor = 'move'; // 设置为手形光标
+            canvasElement.style.cursor = 'move'; // 设置为移动光标
           } else {
-            canvasElement.style.cursor = 'default'; // 设置为默认光标
+            // canvasElement.style.cursor = "url('/mouseicon.png') 0 0, pointer";
+            // canvasElement.style.cursor = "url('https://cdn-icons-png.flaticon.com/32/32/32177.png') 0 0, pointer";
+            if(instance.createType === 7){
+              canvasElement.style.cursor = 'none'; 
+            }else{
+              canvasElement.style.cursor = 'default'; 
+            }
           }
         }
       };
@@ -220,28 +261,40 @@
         mousedown = false;
       }
 
-      const handleRightClick = () => {
-        if (instance.activeShape && instance.hitOnShape(instance.mouse)[0] > -1) {
-          <!-- 右键菜单 -->
-
-        }
-      };
-
       canvasElement.addEventListener('mousemove', handleMouseMove);
       canvasElement.addEventListener('mousedown', handleMouseDown);
       canvasElement.addEventListener('mouseup', handleMouseUp);
-      canvasElement.addEventListener('contextmenu', handleRightClick);
       window.addEventListener('beforeunload', () => {
         canvasElement.removeEventListener('mousemove', handleMouseMove);
         canvasElement.removeEventListener('mousedown', handleMouseDown);
         canvasElement.removeEventListener('mouseup', handleMouseUp);
-        canvasElement.removeEventListener('contextmenu', handleRightClick);
       });
     }
 
+    // 设置自定义光标初始样式
+    function setCursorRadius(newRadius) {
+      radius = newRadius;
+      customCursor.style.width = `${radius * instance.scale}px`;
+      customCursor.style.height = `${radius * instance.scale}px`;
+    }
+
+    setCursorRadius(instance.brushlineWidth);
+
     function change(num) {
       instance.createType = num;
+      if(num===7){
+      }
       console.log("instance.createType", instance.createType);
+    }
+
+    function eraser() {
+      change(7);
+      instance.isEraser = !instance.isEraser;
+      // canvasElement.style.cursor = "url('https://cdn-icons-png.flaticon.com/512/32/32177.png') 0 0, pointer";
+    }
+
+    function nocolor() {
+      instance.activeStrokeStyle = "transparent";
     }
 
     function zoom(type) {
@@ -286,7 +339,7 @@
     }
 
     function changeCanvas(){
-      instance.resize(500, 500);
+      instance.resize(1361, 565);
     }
 
     function saveImage() {

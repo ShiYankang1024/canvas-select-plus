@@ -34,6 +34,8 @@ export default class CanvasSelect extends EventBus {
     MIN_HEIGHT = 10;
     /** 最小圆形半径 */
     MIN_RADIUS = 5;
+    /** 最小轨迹点数 */
+    MIN_POINTNUM = 3;
     /** 边线颜色 */
     strokeStyle = '#0f0';
     /** 填充颜色 */
@@ -96,7 +98,7 @@ export default class CanvasSelect extends EventBus {
     mouse: Point;
     /** 记录背景图鼠标位移 */
     remmberOrigin: number[] = [0, 0];
-    /** 0 不创建，1 矩形，2 多边形，3 点，4 折线，5 圆，6 网格, 7 刷子brush */
+    /** 0 不创建，1 矩形，2 多边形，3 点，4 折线，5 圆，6 网格, 7 刷子brush, 8 橡皮擦 */
     createType: Shape = Shape.None; //
     /** 控制点索引 */
     ctrlIndex = -1;
@@ -152,10 +154,15 @@ export default class CanvasSelect extends EventBus {
     /** 初始化brush线条样式 */
     // brushlineCap = "round";//线段末端为圆形
     // brushlineJoin = "round";//两线段连接处为圆形
-    brushlineWidth = 5;
+    brushlineWidth = 1;
     brushstrokeStyle = "#000";
+    // activebrushstrokeStyle = "#FC5531";
 
-    brushPoints: [number, number][] = [];
+    isEraser = false;
+
+    eraserPoints: [number, number][] = [];
+    
+    eraserSize = 8;// 橡皮擦的半径
 
 
 
@@ -320,9 +327,15 @@ export default class CanvasSelect extends EventBus {
                         case Shape.Brush:
                             newShape = new Brush({ coor: [curPoint] }, this.dataset.length);
                             newShape.creating = true;
+                            newShape.lineWidth = this.brushlineWidth;
+                            newShape.strokeStyle = this.brushstrokeStyle;
                             this.ispainting = true;
-                            this.ctx.beginPath();
-                            this.ctx.moveTo(this.mouse[0], this.mouse[1]); // 将一个新的子路径的起始点移动到 (x，y) 坐标
+                            if(this.isEraser){
+                                // 橡皮擦模式：删除橡皮擦范围内的点
+                                this.eraseAtPoint(curPoint);
+                            }
+                            // this.ctx.beginPath();
+                            // this.ctx.moveTo(this.mouse[0], this.mouse[1]); // 将一个新的子路径的起始点移动到 (x，y) 坐标
                             break;
                         default:
                             break;
@@ -449,8 +462,8 @@ export default class CanvasSelect extends EventBus {
                     const nx = Math.round(offsetX - this.originX / this.scale);
                     const ny = Math.round(offsetY - this.originY / this.scale);
                     const newPoint = [nx, ny];
-                    this.activeShape.coor.splice(this.ctrlIndex, 1, newPoint);
-                } else if (this.activeShape.type === Shape.Circle) {
+                    this.activeShape.coor.splice(this.ctrlIndex, 1, newPoint); // 修改点坐标
+                }else if (this.activeShape.type === Shape.Circle) {
                     const nx = Math.round(offsetX - this.originX / this.scale);
                     const newRadius = nx - this.activeShape.coor[0];
                     if (newRadius >= this.MIN_RADIUS) this.activeShape.radius = newRadius;
@@ -486,17 +499,27 @@ export default class CanvasSelect extends EventBus {
                     const [x0, y0] = this.activeShape.coor;
                     const r = Math.sqrt((x0 - x) ** 2 + (y0 - y) ** 2);
                     this.activeShape.radius = r;
-                } 
-                else if(this.ispainting && this.createType === Shape.Brush){
-                    this.ctx.lineWidth = this.brushlineWidth;
-                    this.ctx.strokeStyle = this.brushstrokeStyle;
-                    this.ctx.lineTo(this.mouse[0], this.mouse[1]); // 使用直线连接子路径的终点到 x，y 坐标的方法（并不会真正地绘制）
-                    // this.ctx.fill();
-                    this.ctx.stroke(); // 根据当前的画线样式，绘制当前或已经存在的路径的方法
-                } 
+                } else if(this.ispainting && this.createType === Shape.Brush){
+                    const nx = Math.round(offsetX - this.originX / this.scale);
+                    const ny = Math.round(offsetY - this.originY / this.scale);
+                    const newPoint: Point = [nx, ny];
+                    if(!this.isEraser){
+                        this.activeShape.coor.push(newPoint);
+                    }else{
+                        // 橡皮擦模式：删除覆盖的部分
+                        this.eraseAtPoint(newPoint);
+                    }
+                }
+                // else if(this.ispainting && this.createType === Shape.Brush){
+                //     this.ctx.lineWidth = this.brushlineWidth;
+                //     this.ctx.strokeStyle = this.brushstrokeStyle;
+                //     this.ctx.lineTo(this.mouse[0], this.mouse[1]); // 使用直线连接子路径的终点到 x，y 坐标的方法（并不会真正地绘制）
+                //     // this.ctx.fill();
+                //     this.ctx.stroke(); // 根据当前的画线样式，绘制当前或已经存在的路径的方法
+                // } 
             }
             this.update();
-        } else if ([Shape.Polygon, Shape.Line].includes(this.activeShape.type) && this.activeShape.creating) {
+        } else if ([Shape.Polygon, Shape.Line, Shape.Brush].includes(this.activeShape.type) && this.activeShape.creating) {
             // 多边形添加点
             this.update();
         } else if ((!this.isMobile && (e as MouseEvent).buttons === 2 && (e as MouseEvent).which === 3) || (this.isMobile && (e as TouchEvent).touches.length === 1 && !this.isTouch2)) {
@@ -551,16 +574,23 @@ export default class CanvasSelect extends EventBus {
                         this.activeShape.creating = false;
                         this.emit('add', this.activeShape);
                     }
-                }
-                else if(this.createType === Shape.Brush){
-                    this.ctx.lineWidth = this.lineWidth;
-                    this.ctx.strokeStyle = this.strokeStyle;
-                    this.ispainting = false;
-                    this.activeShape.creating = false;
-                    this.ctx.closePath(); // 将笔点返回到当前子路径起始点的方法
-                    // console.log('this.canvas.toDataURL()', this.canvas.toDataURL())
-                    // this.doneList.push(deepClone(this.dataset)); // 存储当前 Canvas 状态
-                    // this.drawingHistory.push(this.canvas.toDataURL()); // 存储当前 Canvas 状态
+                } else if(this.createType === Shape.Brush){
+                    if(this.isEraser){
+                        this.dataset.pop();
+                        this.ispainting = false;
+                        this.activeShape.creating = false;
+                    } else {
+                        if (this.activeShape.coor.length < this.MIN_POINTNUM) {
+                            this.dataset.pop();
+                            this.emit('warn', `Path points cannot be less than ${this.MIN_POINTNUM}`);
+                        } else {
+                            this.ispainting = false;
+                            this.activeShape.creating = false;
+                            this.emit('add', this.activeShape);
+                        }
+                    }
+                    // this.ctx.lineWidth = this.lineWidth;
+                    // this.ctx.strokeStyle = this.strokeStyle;
                 }
                 this.update();
             }
@@ -577,8 +607,8 @@ export default class CanvasSelect extends EventBus {
         this.evt = e;
         if (this.lock) return;
         if ([Shape.Polygon, Shape.Line].includes(this.activeShape.type)) {
-            const canPolygon = this.activeShape.type === Shape.Polygon && this.activeShape.coor.length > 2
-            const canLine = this.activeShape.type === Shape.Line && this.activeShape.coor.length > 1
+            const canPolygon = this.activeShape.type === Shape.Polygon && this.activeShape.coor.length > 2;
+            const canLine = this.activeShape.type === Shape.Line && this.activeShape.coor.length > 1;
             if (canPolygon || canLine) {
                 this.emit('add', this.activeShape);
                 this.activeShape.creating = false;
@@ -703,11 +733,14 @@ export default class CanvasSelect extends EventBus {
                         case Shape.Grid:
                             shape = new Grid(item, index);
                             break;
+                        case Shape.Brush:
+                            shape = new Brush(item, index);
+                            break;
                         default:
                             console.warn('Invalid shape', item);
                             break;
                     }
-                    [Shape.Rect, Shape.Polygon, Shape.Dot, Shape.Line, Shape.Circle, Shape.Grid].includes(item.type) && initdata.push(shape);
+                    [Shape.Rect, Shape.Polygon, Shape.Dot, Shape.Line, Shape.Circle, Shape.Grid, Shape.Brush].includes(item.type) && initdata.push(shape);
                 } else {
                     console.warn('Shape must be an enumerable Object.', item);
                 }
@@ -736,7 +769,8 @@ export default class CanvasSelect extends EventBus {
                 (shape.type === Shape.Rect && this.isPointInRect(mousePoint, (shape as Rect).coor)) ||
                 (shape.type === Shape.Polygon && this.isPointInPolygon(mousePoint, (shape as Polygon).coor)) ||
                 (shape.type === Shape.Line && this.isPointInLine(mousePoint, (shape as Line).coor)) ||
-                (shape.type === Shape.Grid && this.isPointInRect(mousePoint, (shape as Grid).coor))
+                (shape.type === Shape.Grid && this.isPointInRect(mousePoint, (shape as Grid).coor)) ||
+                (shape.type === Shape.Brush && this.isPointInPolygon(mousePoint, (shape as Brush).coor))
             ) {
                 if ((this.focusMode && !shape.active) || shape.hiddening) continue;
                 hitShapeIndex = i;
@@ -781,7 +815,7 @@ export default class CanvasSelect extends EventBus {
      * @param mousePoint 点击位置
      * @returns
      */
-    hitOnShapeVertex(mousePoint: Point): string {
+    hitOnShapeVertex(): string {
         let mouseType: string;
         const shape = this.activeShape;
         const ctrls = this.activeShape.ctrlsData || [];
@@ -805,6 +839,8 @@ export default class CanvasSelect extends EventBus {
                 } else {
                     mouseType = 'ew-resize';
                 }
+            } else if(shape.type === Shape.Brush){
+                mouseType = 'move';
             } else {
                 mouseType = 'pointer';
             }
@@ -1123,6 +1159,110 @@ export default class CanvasSelect extends EventBus {
         this.drawLabel(coor[0], shape);
     }
 
+    hexToRGBA(hex: string, alpha = 0.7) {
+        // 去掉 # 号
+        let hexCode = hex.replace(/^#/, '');
+
+        // 检查输入的 hex 是否是有效的三位或六位颜色代码
+        if (!/^[A-Fa-f0-9]{3}$/.test(hexCode) && !/^[A-Fa-f0-9]{6}$/.test(hexCode)) {
+            return hex;
+        }
+
+        // 如果是三位颜色代码，扩展为六位
+        if (hexCode.length === 3) {
+            hexCode = hexCode.split('').map(char => char + char).join('');
+        }
+
+        // 将颜色代码拆分为 R, G, B 组件
+        const r = parseInt(hexCode.slice(0, 2), 16);  // 提取红色部分
+        const g = parseInt(hexCode.slice(2, 4), 16);  // 提取绿色部分
+        const b = parseInt(hexCode.slice(4, 6), 16);  // 提取蓝色部分
+
+        // 返回带有透明度的 RGBA 格式颜色
+        return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    }
+
+    /**
+     * 绘制轨迹
+     * @param shape 轨迹实例
+     */
+    drawBrush(shape: Brush) {
+        const { strokeStyle, active, creating, coor, lineWidth } = shape;
+        this.ctx.save();
+        this.ctx.lineJoin = 'round';
+        this.ctx.lineWidth = lineWidth || this.brushlineWidth;
+        // this.ctx.strokeStyle = (active || creating) ? this.activeStrokeStyle : (strokeStyle || this.brushstrokeStyle);
+        this.ctx.fillStyle = (active || creating) ? (strokeStyle || this.brushstrokeStyle) : (this.hexToRGBA(strokeStyle) || this.hexToRGBA(this.brushstrokeStyle));
+
+        // 应用缩放
+        this.ctx.scale(this.scale, this.scale);
+
+        // if (coor.length > 0) {
+        //     const [firstX, firstY] = coor[0];
+        //     this.ctx.beginPath();
+        //     this.ctx.moveTo(firstX, firstY);
+
+        //     coor.forEach((el: Point, i) => {
+        //         const [x, y] = el;
+        //         this.ctx.lineTo(x, y);
+        //     });
+
+        //     this.ctx.stroke();
+        // }
+
+        if (coor.length > 0) {
+            coor.forEach((point: Point) => {
+                this.ctx.beginPath();
+                this.ctx.arc(point[0], point[1], lineWidth / 2, 0, Math.PI * 2);
+                this.ctx.fill();
+            });
+        }
+
+        if (creating) {
+            const [x, y] = this.mouse || [];
+            if (x !== undefined && y !== undefined) {
+                // 考虑到缩放，需要将鼠标位置转换为未缩放的坐标
+                const unscaledX = (x - this.originX) / this.scale;
+                const unscaledY = (y - this.originY) / this.scale;
+
+                // if (coor.length > 0) {
+                //     const [lastX, lastY] = coor[coor.length - 1];
+                //     this.ctx.beginPath();
+                //     this.ctx.moveTo(lastX, lastY);
+                //     this.ctx.lineTo(unscaledX, unscaledY);
+                //     this.ctx.stroke();
+                // }
+                this.ctx.beginPath();
+                this.ctx.arc(unscaledX, unscaledY, this.brushlineWidth / 2, 0, Math.PI * 2);
+                this.ctx.fill();
+            }
+        }
+
+        this.ctx.restore();
+    }
+
+    // 判断两个点是否接近（是否重叠）
+    arePointsClose(p1: Point, p2: Point) {
+        const dx = p1[0] - p2[0];
+        const dy = p1[1] - p2[1];
+        return Math.sqrt(dx * dx + dy * dy) < this.eraserSize;
+    }
+
+    // 去除与橡皮擦重叠的点
+    removeOverlap(path: Point[], eraserPoint: Point) {
+        return path.filter(point => !this.arePointsClose(point, eraserPoint));
+    }
+
+    // 橡皮擦模式：在(x, y)处擦除路径上的点
+    eraseAtPoint(point: Point) {
+        for(let i = 0; i < this.dataset.length; i++){
+            if(this.dataset[i].type === Shape.Brush){
+                this.dataset[i].coor = this.removeOverlap(this.dataset[i].coor, point);
+            }
+        }
+        this.update(); // 擦除后重绘画布
+    }
+
     /**
      * 绘制网格
      * @param shape 标注实例
@@ -1277,9 +1417,6 @@ export default class CanvasSelect extends EventBus {
      * 更新画布
      */
     update() {
-        if ([Shape.Brush].includes(this.activeShape.type) && !this.activeShape.hiddening) {
-            return;
-        }
         window.cancelAnimationFrame(this.timer);
         this.timer = window.requestAnimationFrame(() => {
             this.ctx.save();
@@ -1313,6 +1450,7 @@ export default class CanvasSelect extends EventBus {
                         this.drawGrid(shape as Grid);
                         break;
                     case Shape.Brush:
+                        this.drawBrush(shape as Brush);
                         break;
                     default:
                         break;
@@ -1586,7 +1724,7 @@ export default class CanvasSelect extends EventBus {
      */
     setScale(type: boolean, byMouse = false, pure = false) {
         if (this.lock) return;
-        if ((!type && this.imageMin < 20) || (type && this.IMAGE_WIDTH > this.imageOriginMax * 100)) return;
+        if ((!type && this.imageMin < 120) || (type && this.IMAGE_WIDTH > this.imageOriginMax * 10)) return;
         if (type) { this.scaleStep++; } else { this.scaleStep--; }
         let realToLeft = 0;
         let realToRight = 0;
