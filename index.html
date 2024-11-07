@@ -12,9 +12,8 @@
     }
 
     .container {
-      background-color: #ccc;
-      width: 1361px;
-      height: 565px;
+      width: 100%;
+      height: 100%;
     }
 
     #canvas {
@@ -38,14 +37,12 @@
       position: absolute;
       width: 100%;
       height: 100%;
-      z-index: -1;
     }
 
     #temp-canvas {
       position: absolute;
       width: 100%;
       height: 100%;
-      z-index: 1;
     }
 
     .right {
@@ -64,22 +61,13 @@
   <div class="box">
     <div>
       <canvas id="canvas" class="container"></canvas>
-      <canvas id="image-canvas"></canvas>
+      <canvas id="image-canvas" class="image"></canvas>
       <canvas id="temp-canvas" style="pointer-events: none;"></canvas>
 
       <!-- 自定义圆形光标 -->
       <div id="customCursor"></div>
 
-      <ul
-        v-if="menuVisible"
-        :style="{ top: menuPosition.y + 'px', left: menuPosition.x + 'px' }"
-        class="context-menu"
-      >
-        <li @click="menuVisible = false">选项 1</li>
-        <li @click="menuVisible = false">选项 2</li>
-        <li @click="menuVisible = false">选项 3</li>
-      </ul>
-      <div style="position: absolute;">
+      <div style="position: absolute; top: 600px;">
         <button onclick="change(1)">创建矩形</button>
         <button onclick="change(2)">创建多边形</button>
         <button onclick="change(3)">创建点</button>
@@ -102,14 +90,16 @@
         <button onclick="nocolor()">透明色</button>
         <button onclick="changeCanvas()">扩大画布</button>
         <button onclick="saveImage()">保存图片</button>
+        <button onclick="getAllMask()">分割一切</button>
+        <button onclick="magicClick()">智能标注</button>
         <div>
           <span>颜色：</span>
           <input type="color" id="colorSelect" onchange="handleColorChange(this)"/>
         </div>
         <div>
           <span>宽度：</span>
-          <input type="range" min="1" max="20" value="1" id="widthRange" onchange="handleWidthChange(this)"/>
-          <span id="widthValue">1</span>
+          <input type="range" min="10" max="20" value="1" id="widthRange" onchange="handleWidthChange(this)"/>
+          <span id="widthValue">10</span>
         </div>
       </div>
       </div>
@@ -123,11 +113,11 @@
     const customCursor = document.getElementById('customCursor');
     const output = document.getElementById('output');
 
-    const instance = new CanvasSelect('.container', 'https://aircas.icu/admin/sys-file/dataset/%E6%B5%8B%E8%AF%95%E5%9F%BA%E7%A1%80%E6%95%B0%E6%8D%AE%E9%9B%860821/base/train/daisy/9b6ce812c8054349906b24917a4d65c4.jpg');
     // const instance = new CanvasSelect('.container', 'https://cdn.pixabay.com/photo/2023/11/03/12/22/toadstool-8362901_1280.jpg');
-    
-    instance.ctrlRadius = navigator.userAgent.includes('Mobile') ? 6 : 3;
-    window.c = instance;
+    const instance = new CanvasSelect('.container', 'https://aircas.icu/admin/sys-file/dataset/%E6%B5%8B%E8%AF%95%E5%9F%BA%E7%A1%80%E6%95%B0%E6%8D%AE%E9%9B%860821/base/train/daisy/326fb39312f2496a8a24cd80d868c017.jpg');
+    const instance1 = new CanvasSelect('.image', 'https://aircas.icu/admin/sys-file/dataset/%E6%B5%8B%E8%AF%95%E5%9F%BA%E7%A1%80%E6%95%B0%E6%8D%AE%E9%9B%860821/base/train/daisy/326fb39312f2496a8a24cd80d868c017.jpg');
+    // instance.ctrlRadius = navigator.userAgent.includes('Mobile') ? 6 : 3;
+    // window.c = instance;
 
     // for drawer
     const canvas = document.getElementById('canvas');
@@ -143,6 +133,8 @@
     // for image-size mask canvas
     const maskcanvas = document.createElement('canvas');
     const maskcontext = maskcanvas.getContext('2d');
+    instance.resize(800, 554, 0.2);
+    instance1.resize(800, 554);
     
     // 处理颜色选择器的 change 事件
     function handleColorChange(input) {
@@ -157,21 +149,22 @@
       setCursorRadius(instance.brushlineWidth);
     }
     let option = [
-      {
-        label: "矩形",
-        coor: [[150, 150], [275, 275]],
-        type: 1
-      },
+      // {
+      //   label: "矩形",
+      //   coor: [[150, 150], [275, 275]],
+      //   type: 1
+      // },
       // {
       //   label: "多边形",
       //   coor: [[135, 291], [129, 319], [146, 346], [174, 365], [214, 362], [196, 337], [161, 288]],
       //   type: 2
       // },
-      // {
-      //   label: "点",
-      //   coor: [345, 406],
-      //   type: 3
-      // },
+      {
+        label: "点",
+        coor: [85, 105],
+        color: 'red',
+        type: 3
+      },
       // {
       //   label: "折线",
       //   coor: [[470, 155], [490, 230], [493, 298]],
@@ -192,10 +185,28 @@
       //   selected: [4]
       // },
     ];
+    let option1 = [
+      {
+        maskBase64:"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",
+        type: 8,
+        maskType: 'everything',
+      },
+    ];
 
     instance.on('load', (src) => {
       console.log('图片加载完成', src);
-      instance.setData(option);
+      // instance.setData(option);
+    });
+
+    instance.on('scale', (info) => {
+        instance1.mouse = instance.mouse;
+        instance1.setScale(info.type, info.byMouse, info.pure);
+    });
+
+    instance.on('dragimg', () => {
+      instance1.originX = instance.originX;
+      instance1.originY = instance.originY;
+      instance1.update();
     });
 
     instance.on('warn', (msg) => {
@@ -287,10 +298,19 @@
       console.log("instance.createType", instance.createType);
     }
 
+    function getAllMask() {
+      instance.setData(option);
+      instance1.setData(option1);
+    }
+
+    function magicClick() {
+
+    }
+
     function eraser() {
-      change(7);
       instance.isEraser = !instance.isEraser;
-      // canvasElement.style.cursor = "url('https://cdn-icons-png.flaticon.com/512/32/32177.png') 0 0, pointer";
+      console.log("instance.isEraser", instance.isEraser);
+      change(7);
     }
 
     function nocolor() {
@@ -303,6 +323,7 @@
 
     function fitting() {
       instance.fitZoom();
+      instance1.fitZoom();
     }
 
     function focusMode() {
@@ -339,7 +360,7 @@
     }
 
     function changeCanvas(){
-      instance.resize(1361, 565);
+      instance.resize(800, 554);
     }
 
     function saveImage() {
