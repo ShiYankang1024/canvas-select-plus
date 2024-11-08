@@ -390,6 +390,10 @@ export default class CanvasSelect extends EventBus {
                         if(hitShape.type === Shape.Dot && ('color' in hitShape) && hitShape.color !== ''){
                             return; // 智能标注生成的点不可被选中
                         }
+                        if(hitShape.type === Shape.Brush){
+                            this.emit('select', hitShape);
+                            return; // 刷子和橡皮檫轨迹不可被拖拽
+                        }
                         hitShape.dragging = true;
                         this.dataset.forEach((item, i) => item.active = i === hitShapeIndex);
                         this.dataset.splice(hitShapeIndex, 1, hitShape);
@@ -637,6 +641,8 @@ export default class CanvasSelect extends EventBus {
                     } else {
                         this.ispainting = false;
                         this.activeShape.creating = false;
+                        // 去除重复点
+                        this.activeShape.coor = this.removeDuplicatePoints(this.activeShape.coor);
                         this.emit('add', this.activeShape);
                     }
                 }
@@ -1302,6 +1308,21 @@ export default class CanvasSelect extends EventBus {
     isRGBA(color: string): boolean {
         const rgbaRegex = /^rgba\((\d{1,3}),\s*(\d{1,3}),\s*(\d{1,3}),\s*(0(\.\d+)?|1(\.0+)?)\)$/;
         return rgbaRegex.test(color);
+    }
+
+    removeDuplicatePoints(points: [number, number][]) {
+        const seen = new Set();
+        const uniquePoints: [number, number][] = [];
+        
+        points.forEach(point => {
+            const key = `${point[0]},${point[1]}`;
+            if (!seen.has(key)) {
+            seen.add(key);
+            uniquePoints.push(point);
+            }
+        });
+        
+        return uniquePoints;
     }
 
     /**
