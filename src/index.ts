@@ -48,6 +48,8 @@ export default class CanvasSelect extends EventBus {
     MIN_RADIUS = 5;
     /** 最小轨迹点数 */
     MIN_POINTNUM = 3;
+    /** 缩放图像的最小边长 */
+    MIN_LENGTH = 140;
     /** 边线颜色 */
     strokeStyle = '#0f0';
     /** 填充颜色 */
@@ -69,7 +71,11 @@ export default class CanvasSelect extends EventBus {
     /** 标签背景填充颜色 */
     labelFillStyle = 'rgba(255, 255, 255, 0.5)';
     /** 标签字体 */
-    labelFont = '12px sans-serif';
+    // labelFont = '12px sans-serif';
+    /** 标签字型 */
+    labelFontFamily = 'sans-serif';
+    /** 标签字号 */
+    labelFontSize = 12;
     /** 标签文字颜色 */
     textFillStyle = '#FFFFFF';
     /** 标签字符最大长度，超出使用省略号 */
@@ -391,7 +397,9 @@ export default class CanvasSelect extends EventBus {
                             return; // 智能标注生成的点不可被选中
                         }
                         if(hitShape.type === Shape.Brush){
-                            this.emit('select', hitShape);
+                            if('iseraser' in hitShape && !hitShape.iseraser){
+                                this.emit('select', hitShape);
+                            }
                             return; // 刷子和橡皮檫轨迹不可被拖拽
                         }
                         hitShape.dragging = true;
@@ -552,31 +560,7 @@ export default class CanvasSelect extends EventBus {
                     const newPoint: Point = [nx, ny];
                     this.activeShape.coor.push(newPoint);
                 }
-                // else if(this.ispainting && this.createType === Shape.Brush){
-                //     this.ctx.lineWidth = this.brushlineWidth;
-                //     this.ctx.strokeStyle = this.brushstrokeStyle;
-                //     this.ctx.lineTo(this.mouse[0], this.mouse[1]); // 使用直线连接子路径的终点到 x，y 坐标的方法（并不会真正地绘制）
-                //     // this.ctx.fill();
-                //     this.ctx.stroke(); // 根据当前的画线样式，绘制当前或已经存在的路径的方法
-                // } 
             } 
-            // else {
-            //     if (this.isInBackground(e) && this.isEraser && this.isErasing) {
-            //         this.ctx.save();
-            //         this.ctx.lineWidth = this.brushlineWidth;
-            //         this.ctx.globalCompositeOperation = 'destination-out';
-            //         this.ctx.beginPath();
-            //         this.ctx.moveTo(this.lastX, this.lastY);
-            //         this.ctx.lineTo(this.mouse[0], this.mouse[1]);
-            //         this.ctx.stroke();
-            //         this.ctx.beginPath();
-            //         this.ctx.arc(this.mouse[0], this.mouse[1], this.brushlineWidth / 2, 0, Math.PI * 2);
-            //         this.ctx.fill();
-            //         this.lastX = this.mouse[0];
-            //         this.lastY = this.mouse[1];
-            //         return;
-            //     }
-            // }
             this.update();
         } else if ([Shape.Polygon, Shape.Line, Shape.Brush].includes(this.activeShape.type) && this.activeShape.creating) {
             // 多边形添加点
@@ -648,22 +632,12 @@ export default class CanvasSelect extends EventBus {
                 }
                 this.update();
             }
-            const condition = ['coor', 'label', 'labelFont', 'labelUp', 'lineWidth', 'strokeStyle', 'textFillStyle', 'uuid', 'length'];
+            const condition = ['coor', 'label', 'labelUp', 'lineWidth', 'strokeStyle', 'textFillStyle', 'uuid', 'length'];
             console.log(deepEqual(this.olddataset, this.dataset, condition));
             if (!deepEqual(this.olddataset, this.dataset, condition)) {
                 this.doneList.push(deepClone(this.dataset));
             }
         } 
-        // else {
-        //     if(this.isEraser){
-        //         this.ctx.globalCompositeOperation = 'source-over';
-        //         // this.ctx.globalAlpha = 1.0;
-        //         // this.ctx.lineWidth = this.lineWidth;
-        //         // this.ctx.fillStyle = this.fillStyle;
-        //         // this.ctx.strokeStyle = this.strokeStyle;
-        //         this.isErasing = false;
-        //     }
-        // }
     }
 
     private handleDblclick(e: MouseEvent | TouchEvent) {
@@ -852,7 +826,7 @@ export default class CanvasSelect extends EventBus {
                 (shape.type === Shape.Polygon && this.isPointInPolygon(mousePoint, (shape as Polygon).coor)) ||
                 (shape.type === Shape.Line && this.isPointInLine(mousePoint, (shape as Line).coor)) ||
                 (shape.type === Shape.Grid && this.isPointInRect(mousePoint, (shape as Grid).coor)) ||
-                (shape.type === Shape.Brush && this.isPointInPolygon(mousePoint, (shape as Brush).coor))
+                (shape.type === Shape.Brush && this.isPointInLine(mousePoint, (shape as Brush).coor))
             ) {
                 if ((this.focusMode && !shape.active) || shape.hiddening) continue;
                 hitShapeIndex = i;
@@ -1656,13 +1630,13 @@ export default class CanvasSelect extends EventBus {
      * @param label 文本
      */
     drawLabel(point: Point, shape: AllShape) {
-        const { label = '', labelFillStyle = '', labelFont = '', textFillStyle = '', hideLabel, labelUp, lineWidth } = shape;
+        const { label = '', labelFillStyle = '', labelFontSize = 12, labelFontFamily = '', textFillStyle = '', hideLabel, labelUp, lineWidth } = shape;
         const isHideLabel = typeof hideLabel === 'boolean' ? hideLabel : this.hideLabel;
         const isLabelUp = typeof labelUp === 'boolean' ? labelUp : this.labelUp;
         const currLineWidth = lineWidth || this.lineWidth;
 
         if (label.length && !isHideLabel) {
-            this.ctx.font = labelFont || this.labelFont;
+            this.ctx.font = (labelFontSize && labelFontFamily) ? `${labelFontSize}px ${labelFontFamily}` : `${this.labelFontSize}px ${this.labelFontFamily}`;
             const textPaddingLeft = 4;
             const textPaddingTop = 4;
             const newText = label.length < this.labelMaxLen + 1 ? label : `${label.slice(0, this.labelMaxLen)}...`;
@@ -1694,8 +1668,8 @@ export default class CanvasSelect extends EventBus {
             this.ctx.fillRect(rectX, rectY, rectWidth, rectHeight);
             
             // 设置文本样式并考虑缩放
-            const scaledFontSize = font * this.scale;  // 根据缩放因子调整字体大小
-            this.ctx.font = `${scaledFontSize}px sans-serif`;  // 更新字体大小
+            // const scaledFontSize = font * this.scale;  // 根据缩放因子调整字体大小
+            // this.ctx.font = `${this.labelFontSize * this.scale}px sans-serif`;  // 更新字体大小
 
             this.ctx.fillStyle = textFillStyle || this.textFillStyle;
 
@@ -2046,7 +2020,7 @@ export default class CanvasSelect extends EventBus {
      */
     setScale(type: boolean, byMouse = false, pure = false) {
         if (this.lock) return;
-        if ((!type && this.imageMin < 120) || (type && this.IMAGE_WIDTH > this.imageOriginMax * 10)) return;
+        if ((!type && this.imageMin < this.MIN_LENGTH) || (type && this.IMAGE_WIDTH > this.imageOriginMax * 10)) return;
         if (type) { this.scaleStep++; } else { this.scaleStep--; }
         let realToLeft = 0;
         let realToRight = 0;

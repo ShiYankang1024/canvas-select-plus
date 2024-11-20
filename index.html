@@ -151,22 +151,22 @@
       setCursorRadius(instance.brushlineWidth);
     }
     let option = [
-      // {
-      //   label: "矩形",
-      //   coor: [[150, 150], [275, 275]],
-      //   type: 1
-      // },
+      {
+        label: "矩形",
+        coor: [[150, 150], [375, 375]],
+        type: 1
+      },
       // {
       //   label: "多边形",
       //   coor: [[135, 291], [129, 319], [146, 346], [174, 365], [214, 362], [196, 337], [161, 288]],
       //   type: 2
       // },
-      {
-        label: "点",
-        coor: [85, 105],
-        color: 'red',
-        type: 3
-      },
+      // {
+      //   label: "点",
+      //   coor: [85, 105],
+      //   color: 'red',
+      //   type: 3
+      // },
       // {
       //   label: "折线",
       //   coor: [[470, 155], [490, 230], [493, 298]],
@@ -197,7 +197,9 @@
 
     instance.on('load', (src) => {
       console.log('图片加载完成', src);
-      // instance.setData(option);
+      instance.labelFontSize = 30;
+      console.log("this.ctx.font", instance.ctx.font);
+      instance.setData(option);
     });
 
     instance.on('scale', (info) => {
@@ -230,7 +232,8 @@
 
     instance.on('updated', (result) => {
       console.log('标注结果', result);
-      console.log("this.activeShape", this.activeShape);
+      // console.log("this.activeShape", this.activeShape);
+      console.log("this.scale", instance.scale);
     });
 
     instance.on('contextmenu', () => {

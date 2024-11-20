@@ -25,6 +25,10 @@ export default class Shape {
     public textFillStyle: string
     /** 标签文字字体 */
     public labelFont: string
+    /** 标签文字字型 */
+    public labelFontFamily: string
+    /** 标签文字字号 */
+    public labelFontSize: number
     /** 1 矩形，2 多边形，3 点，4 折线，5 圆，6 网格 */
     public type: number // 形状
     /** 当前是否处于活动状态 */
