@@ -2,8 +2,10 @@ import Shape from './Shape';
 
 export default class Rect extends Shape {
   public type = 1
+  public iscontour = false
   constructor(item: any, index: number) {
     super(item, index)
+    // this.iscontour = item.iscontour || this.iscontour // 智能标注框
   }
   get ctrlsData() {
     const [[x0, y0], [x1, y1]] = this.coor;

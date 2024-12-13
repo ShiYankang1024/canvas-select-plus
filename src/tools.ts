@@ -1,3 +1,5 @@
+import Shape from "./shape/Shape";
+
 export function createUuid(): string {
   const s: any[] = [];
   const hexDigits = "0123456789abcdef";
@@ -109,6 +111,14 @@ export function deepClone<T>(obj: T, hash = new WeakMap()): T {
     return hash.get(obj);
   }
 
+  // 处理 ImageData 对象
+  if (obj instanceof ImageData) {
+    // 创建一个新的 ImageData 对象，并拷贝其 data 属性
+    const newImageData = new ImageData(new Uint8ClampedArray(obj.data), obj.width, obj.height);
+    hash.set(obj, newImageData);
+    return newImageData as any;
+  }
+
   // 处理 Date 对象
   if (obj instanceof Date) {
     return new Date(obj.getTime()) as any;
@@ -170,6 +180,17 @@ export function deepClone<T>(obj: T, hash = new WeakMap()): T {
 export function deepEqual(obj1: any, obj2: any, keysToCompare?: string[]): boolean {
   // 如果两个对象或数组引用相同，直接返回 true
   if (obj1 === obj2) return true;
+
+  // 如果 obj1 和 obj2 的 type 都为 8(Mask)，比较特定属性值
+  if (obj1.type === 8 && obj2.type === 8) {
+    const maskKeysToCompare = ['uuid', 'label', 'maskBase64'];
+    for (let key of maskKeysToCompare) {
+      if (obj1[key] !== obj2[key]) {
+        return false;
+      }
+    }
+    return true; // 如果 uuid, label, maskBase64 都相等，返回 true
+  }
 
   // 检查是否为对象或数组
   if (typeof obj1 !== 'object' || obj1 === null ||

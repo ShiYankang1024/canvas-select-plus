@@ -85,21 +85,32 @@
         <button onclick="clearAll()">清空图形</button>
         <button onclick="undo()">撤销</button>
         <button onclick="redo()">重做</button>
-        <button onclick="change(7)">画笔</button>        
+        <button onclick="change(7)">刷子</button>       
+        <button onclick="change(9)">画笔</button>  
+        <br />  
         <button onclick="eraser()">橡皮擦</button>
         <button onclick="nocolor()">透明色</button>
         <button onclick="changeCanvas()">扩大画布</button>
         <button onclick="saveImage()">保存图片</button>
         <button onclick="getAllMask()">分割一切</button>
         <button onclick="magicClick()">智能标注</button>
+        <button onclick="transferMaskImage()">生成Mask图</button>
+        <br />  
+        <button onclick="instance.addPoint(instance.activeShape)">添加点</button>
+        <button onclick="instance.deletePoint(instance.activeShape)">删除点</button>
+        <br />  
+        <!-- 滑动条 -->
+        <input type="range" id="slider" min="0" max="0.3" value="0.15" step="0.05" oninput="onSliderChange(event)" />
+        <span id="sliderValue">0.15</span> <!-- 显示当前滑动条的值 -->
+        <button onclick="donePoints()">确定轮廓点</button>
         <div>
           <span>颜色：</span>
           <input type="color" id="colorSelect" onchange="handleColorChange(this)"/>
         </div>
         <div>
           <span>宽度：</span>
-          <input type="range" min="10" max="20" value="1" id="widthRange" onchange="handleWidthChange(this)"/>
-          <span id="widthValue">10</span>
+          <input type="range" min="10" max="20" value="15" id="widthRange" onchange="handleWidthChange(this)"/>
+          <span id="widthValue">15</span>
         </div>
       </div>
       </div>
@@ -114,8 +125,8 @@
     const output = document.getElementById('output');
 
     // const instance = new CanvasSelect('.container', 'https://cdn.pixabay.com/photo/2023/11/03/12/22/toadstool-8362901_1280.jpg');
-    const instance = new CanvasSelect('.container', 'https://cdn.pixabay.com/photo/2023/11/03/12/22/toadstool-8362901_1280.jpg');
-    const instance1 = new CanvasSelect('.image', 'https://cdn.pixabay.com/photo/2023/11/03/12/22/toadstool-8362901_1280.jpg');
+    const instance = new CanvasSelect('.container', 'https://aircas.icu/admin/sys-file/dataset/%E6%B5%8B%E8%AF%95%E5%9F%BA%E7%A1%80%E6%95%B0%E6%8D%AE%E9%9B%860821/base/train/daisy/16ee1ad00fd64938bdfd9f57c14b0f18.jpg');
+    const instance1 = new CanvasSelect('.image', 'https://aircas.icu/admin/sys-file/dataset/%E6%B5%8B%E8%AF%95%E5%9F%BA%E7%A1%80%E6%95%B0%E6%8D%AE%E9%9B%860821/base/train/daisy/16ee1ad00fd64938bdfd9f57c14b0f18.jpg');
     // const instance = new CanvasSelect('.container', 'https://aircas.icu/admin/sys-file/dataset/%E6%B5%8B%E8%AF%95%E5%9F%BA%E7%A1%80%E6%95%B0%E6%8D%AE%E9%9B%860821/base/train/daisy/326fb39312f2496a8a24cd80d868c017.jpg');
     // const instance1 = new CanvasSelect('.image', 'https://aircas.icu/admin/sys-file/dataset/%E6%B5%8B%E8%AF%95%E5%9F%BA%E7%A1%80%E6%95%B0%E6%8D%AE%E9%9B%860821/base/train/daisy/326fb39312f2496a8a24cd80d868c017.jpg');
     // instance.ctrlRadius = navigator.userAgent.includes('Mobile') ? 6 : 3;
@@ -135,8 +146,8 @@
     // for image-size mask canvas
     const maskcanvas = document.createElement('canvas');
     const maskcontext = maskcanvas.getContext('2d');
-    instance.resize(800, 554, 0.2);
-    instance1.resize(800, 554);
+    instance.resize(1800, 854, 0);
+    instance1.resize(1800, 854);
     
     // 处理颜色选择器的 change 事件
     function handleColorChange(input) {
@@ -151,16 +162,40 @@
       setCursorRadius(instance.brushlineWidth);
     }
     let option = [
-      {
-        label: "矩形",
-        coor: [[150, 150], [375, 375]],
-        type: 1
-      },
       // {
-      //   label: "多边形",
-      //   coor: [[135, 291], [129, 319], [146, 346], [174, 365], [214, 362], [196, 337], [161, 288]],
-      //   type: 2
+      //   label: "矩形",
+      //   // coor: [[557, 311], [1047, 759]],
+      //   coor: [[156, 87], [294, 213]],
+      //   type: 1
       // },
+      // {
+      //   maskBase64: "iVBORw0KGgoAAAANSUhEUgAAAUAAAADwAQAAAABZVoDGAAAClElEQVR4nO2YMXLbMBBFP0WNrUIjM12KTKSZNCk14wOYRcocwkdI6S48Qo7ELi59BE6qNJlB4iK0Q3pTkJQAELtYO+qC3xALPf5dgAAkCkhKSkpKSkpKSkpKSkr639RY7YXAXSr91qR0vETxRgWWwLusnqIly91UQPkBcfAcQHX3is84Kieilo7jYWtcj6ZRcFShBVdRcD81jOy0pUFtZmTH3dTYRFKX43VZyJmzMTN1n+Uar+ggucby2JTBueJgc3LHnfipNer25Kn14CfpQ6vGP63ScSmmbmY9ihq1qcdVoQAbCTSzHvWEh7U/J0sV7/hR60iOYy2AX23wCQCyMOiGGVtjNe/STA/xYP0yxyf2kwty1LGOhRvmrTI1gPA8Zn5RD6uw41nIUZVaXaPRgg3Cg8k7r4NfFK6EZx2Q+lmHwOAiCIHDttOkrhX1AHjGMmvdkAcfAveFp6d0ohUPNk605EHjRDkPeqOpWPC1G5ZBaPi15cgwjutQh2qZLbTgBL8YbAN9QdDfW3hkwNmo1QfAF6Z/6084V6MJ3a0ZNevoj/qRA3vvQBK2QuVEwlZwdcaDteL2QVf2NLKHFLxtyI7a160AXttBDXBf7M5XEi14x40dZBUPFk5U8uDOifY8WDqR+hHiBGDtRN/527ezLfOvqa+1t9uJt/zPnuMbFxFR3Uk19tWhueNfmJGTOY7bQHK8M4fmKkwMjp114HeCY79EX06BBIbEggfH575zsVJOj6VVDPQeMQ96xykPegc0CxZmuPbvY45TBU0M/DZcbmOpffFgrXS4GBdaFQM3ORHd0/0UsxviVw70P7qf8dwZ9R3yZgr5wVDZAb0CBH7DWr8SaOL1AQDe4kZJHv9uSkpKSlLpL+l6Z7mdrIzxAAAAAElFTkSuQmCC",
+      //   pixels: [],
+      //   height: 0,
+      //   weight: 0,
+      //   fillStyle: 'rgba(255, 0, 0, 0.5)',
+      //   type: 8,
+      //   tagId: '',
+      //   label: '',
+      //   strokeStyle: 'rgba(253, 148, 12, 0.75)',
+      //   maskType: 'click',
+      //   maskToPolygon: false,
+      //   magicPoints: [
+      //     {
+      //       coor: [100, 100],
+      //       color: 'green',
+      //     },
+      //     {
+      //       coor: [200, 200],
+      //       color: 'red',
+      //     }
+      //   ]
+      // },
+      {
+        label: "",
+        coor: [[135, 191], [129, 119], [146, 146], [174, 165], [214, 162], [196, 137], [161, 188]],
+        type: 2
+      },
       // {
       //   label: "点",
       //   coor: [85, 105],
@@ -168,8 +203,8 @@
       //   type: 3
       // },
       // {
-      //   label: "折线",
-      //   coor: [[470, 155], [490, 230], [493, 298]],
+      //   label: "",
+      //   coor: [[170, 111], [190, 112], [193, 133]],
       //   type: 4
       // },
       // {
@@ -198,7 +233,9 @@
     instance.on('load', (src) => {
       console.log('图片加载完成', src);
       instance.labelFontSize = 30;
+      instance.brushlineWidth = 30;
       console.log("this.ctx.font", instance.ctx.font);
+      instance.densityFactor = 15;
       instance.setData(option);
     });
 
@@ -207,10 +244,14 @@
         instance1.setScale(info.type, info.byMouse, info.pure);
     });
 
+    instance.on('shape-change', (option) => {
+        // instance.setData(option);
+    });
+
     instance.on('dragimg', () => {
       instance1.originX = instance.originX;
       instance1.originY = instance.originY;
-      instance1.update();
+      // instance1.update();
     });
 
     instance.on('warn', (msg) => {
@@ -228,11 +269,12 @@
 
     instance.on('select', (info) => {
       console.log('当前选中', info);
+      // instance.activeStrokeStyle = info.strokeStyle;
     });
 
     instance.on('updated', (result) => {
       console.log('标注结果', result);
-      // console.log("this.activeShape", this.activeShape);
+      console.log("instance.originX", instance.originX);
       console.log("this.scale", instance.scale);
     });
 
@@ -253,10 +295,18 @@
         customCursor.style.left = `${x}px`;
         customCursor.style.top = `${y}px`;
         if (!mousedown) {
-          if (instance.hitOnShapeVertex(instance.mouse)) {
-            canvasElement.style.cursor = instance.hitOnShapeVertex(instance.mouse);
-          } else if (instance.hitOnShape(instance.mouse)[0] > -1) {
-            canvasElement.style.cursor = 'move'; // 设置为移动光标
+          let hightlight = false;
+          const [hitShapeIndex, hitShape] = instance.hitOnShape(instance.mouse);
+          if (instance.hitOnShapeVertex()) {
+            canvasElement.style.cursor = instance.hitOnShapeVertex();
+          } else if (hitShapeIndex > -1) {
+            if(hitShape.type === 8){
+              canvasElement.style.cursor = 'pointer';
+              instance.highlightMask(hitShapeIndex);
+              hightlight = true;
+            }else{
+              canvasElement.style.cursor = 'move'; // 设置为移动光标
+            }
           } else {
             // canvasElement.style.cursor = "url('/mouseicon.png') 0 0, pointer";
             // canvasElement.style.cursor = "url('https://cdn-icons-png.flaticon.com/32/32/32177.png') 0 0, pointer";
@@ -265,6 +315,9 @@
             }else{
               canvasElement.style.cursor = 'default'; 
             }
+          }
+          if(!hightlight){
+            instance.highlightMask(-1);
           }
         }
       };
@@ -301,6 +354,10 @@
       if(num===7){
       }
       console.log("instance.createType", instance.createType);
+    }
+
+    function transferMaskImage(){
+      instance.setData(option, true, true);
     }
 
     function getAllMask() {
@@ -377,6 +434,27 @@
       downloadLink.href = imageDataUrl;
       downloadLink.download = 'canvas_image.png'; // 设定下载的文件名
       downloadLink.click();
+    }
+    // 监听滑动条变化的函数
+    function onSliderChange(event) {
+      const sliderValue = event.target.value;
+      console.log("滑动条当前值：", sliderValue);
+      // 在这里可以执行你的逻辑，根据slider的值做处理
+      // 例如：调整图像的处理效果，更新界面，等等
+      document.getElementById('sliderValue').innerText = sliderValue;
+      instance.densityFactor = sliderValue;
+      if(instance.activeCanvasData && instance.activePolygon){
+        instance.changeMaskPolygon(sliderValue);
+      }
+    }
+    function donePoints(){
+      if(instance.magicPoints.length > 0){
+        instance.endMagicTool();
+      }
+      instance.activeCanvasData = null;
+      instance.activePolygon = '';
+      instance.densityFactor = 0.5;
+      instance.magicPoints = [];
     }
   </script>
 </body>

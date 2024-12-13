@@ -1,6 +1,6 @@
 {
   "name": "canvas-select-plus",
-  "version": "2.23.21",
+  "version": "2.23.24",
   "description": "在canvas-select的基础上，添加了清空、复制、撤销、重做、隐藏、显示和鼠标样式变化等功能，尚在开发和维护中...",
   "main": "lib/canvas-select.min.js",
   "types": "lib/src/index.d.ts",
@@ -29,13 +29,18 @@
     "画笔、橡皮檫",
     "保存图片",
     "分割一切（需后端接口支持）",
-    "智能标注（需后端接口支持）"
+    "智能标注（需后端接口支持）",
+    "钢笔工具",
+    "Mask转Polygon",
+    "触碰控制点样式变化",
+    "Polygon可添加删除边界点"
   ],
   "author": "heylight,sykant",
   "license": "MIT",
   "devDependencies": {
     "@babel/core": "^7.14.6",
     "@rollup/plugin-babel": "^5.3.0",
+    "@rollup/plugin-commonjs": "^28.0.1",
     "@rollup/plugin-json": "^6.0.0",
     "@typescript-eslint/eslint-plugin": "^4.28.4",
     "@typescript-eslint/parser": "^4.28.4",

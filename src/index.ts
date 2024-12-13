@@ -7,11 +7,13 @@ import Circle from './shape/Circle';
 import Grid from './shape/Grid';
 import Brush from './shape/Brush';
 import Mask from './shape/Mask';
+import Pencil from './shape/Pencil';
 import pkg from '../package.json';
 import { isNested, createUuid, deepClone, deepEqual } from "./tools";
 
+
 export type Point = [number, number];
-export type AllShape = Rect | Polygon | Dot | Line | Circle | Grid | Mask;
+export type AllShape = Rect | Polygon | Dot | Line | Circle | Grid | Brush | Mask | Pencil;
 enum Shape {
     None,
     Rect,
@@ -21,17 +23,17 @@ enum Shape {
     Circle,
     Grid,
     Brush,
-    Mask
+    Mask,
+    Pencil
 }
+// interface MagicPoint {
+//     type: boolean;
+//     origPoint: [number, number];
+//     scaledPoint: [number, number];
+// };
 interface MagicPoint {
-    type: boolean;
-    origPoint: [number, number];
-    scaledPoint: [number, number];
-};
-interface Prompt {
-    origPoint: [number, number];
-    scaledPoint: [number, number];
-    type?: boolean;
+    coor: [number, number];
+    color: string;
 }
 export default class CanvasSelect extends EventBus {
     /** 当前版本 */
@@ -59,7 +61,7 @@ export default class CanvasSelect extends EventBus {
     /** 当前选中的标注边线颜色 */
     activeStrokeStyle = 'rgba(0, 0, 255, 1)';
     /** 当前选中的标注填充颜色 */
-    activeFillStyle = 'rgba(0, 0, 255, 0.5)';
+    activeFillStyle = 'transparent';
     /** 控制点边线颜色 */
     ctrlStrokeStyle = '#000';
     /** 控制点填充颜色 */
@@ -106,9 +108,6 @@ export default class CanvasSelect extends EventBus {
     /** 记录所有隐藏图形的uuid*/
     hideList: string[] = [];
 
-    /** 记录brush的轨迹*/
-    drawingHistory: string[] = [];
-
     offScreen: HTMLCanvasElement;
 
     offScreenCtx: CanvasRenderingContext2D;
@@ -118,10 +117,12 @@ export default class CanvasSelect extends EventBus {
     mouse: Point;
     /** 记录背景图鼠标位移 */
     remmberOrigin: number[] = [0, 0];
-    /** 0 不创建，1 矩形，2 多边形，3 点，4 折线，5 圆，6 网格, 7 刷子brush, 8 橡皮擦 */
+    /** 0 不创建，1 矩形，2 多边形，3 点，4 折线，5 圆，6 网格, 7 刷子brush, 8 Mask，9 钢笔 */
     createType: Shape = Shape.None; //
     /** 控制点索引 */
     ctrlIndex = -1;
+    /** 选中控制点索引 */
+    clickIndex = -1;
     /** 背景图片 */
     image: HTMLImageElement = new Image();
     /** 图片原始宽度 */
@@ -171,12 +172,21 @@ export default class CanvasSelect extends EventBus {
     /** 记录是否正在使用brush */
     ispainting = false;
 
-    /** 初始化brush线条样式 */
-    // brushlineCap = "round";//线段末端为圆形
-    // brushlineJoin = "round";//两线段连接处为圆形
+    /** brush线条样式 */
     brushlineWidth = 1;
-    brushstrokeStyle = "rgba(255, 255, 0)";
-    // activebrushstrokeStyle = "#FC5531";
+    brushstrokeStyle = "rgba(255, 0, 0, 0.6)";
+
+    pencillineWidth = 0.5;
+    pencilstrokeStyle = "rgba(255, 0, 0, 0.6)";
+
+    // maskfillStyle = "rgba(255, 0, 0, 0.5)";
+    mask_alpha = 96;
+    densityFactor = 1;
+
+    /** 记录正在生成轮廓的mask的canvasData */
+    activeCanvasData: ImageData | null = null;
+    /** 记录正在生成的轮廓 */
+    activePolygon: string = '';
 
     isEraser = false;
     isErasing = false;
@@ -191,14 +201,13 @@ export default class CanvasSelect extends EventBus {
         { r: 0, b: 255, g: 0 }
     ];
 
-    alpha_255 = 192;
-
     isMagicToolActive = false;
 
-    promptPoints : MagicPoint[] = [];
+    magicPoints : MagicPoint[] = [];
 
     lastX = 0;
     lastY = 0;
+
 
 
     /**
@@ -318,6 +327,7 @@ export default class CanvasSelect extends EventBus {
         if ((!this.isMobile && (e as MouseEvent).buttons === 1) || (this.isMobile && (e as TouchEvent).touches.length === 1)) { // 鼠标左键
             const ctrls = this.activeShape.ctrlsData || [];
             this.ctrlIndex = ctrls.findIndex((coor: Point) => this.isPointInCircle(this.mouse, coor, this.ctrlRadius));
+            this.clickIndex = this.ctrlIndex; // 记录选中的控制点索引，用于控制点加粗变红和编辑控制点
             if (this.ctrlIndex > -1 && !this.readonly) { // 点击到控制点
                 console.log("this.ctrlIndex", this.ctrlIndex)
                 const [x0, y0] = ctrls[this.ctrlIndex];
@@ -383,6 +393,13 @@ export default class CanvasSelect extends EventBus {
                                 // this.lastY = this.mouse[1];
                             } 
                             break;
+                        case Shape.Pencil:
+                            newShape = new Pencil({ coor: [curPoint] }, this.dataset.length);
+                            newShape.creating = true;
+                            newShape.lineWidth = this.pencillineWidth;
+                            newShape.strokeStyle = this.pencilstrokeStyle;
+                            this.ispainting = true;
+                            break;
                         default:
                             break;
                     }
@@ -398,10 +415,21 @@ export default class CanvasSelect extends EventBus {
                         }
                         if(hitShape.type === Shape.Brush){
                             if('iseraser' in hitShape && !hitShape.iseraser){
+                                hitShape.active = true;
                                 this.emit('select', hitShape);
                             }
-                            return; // 刷子和橡皮檫轨迹不可被拖拽
+                            return; // 刷子、橡皮檫和钢笔轨迹不可被拖拽
                         }
+                        if(hitShape.type === Shape.Pencil){
+                            hitShape.active = true;
+                            this.emit('select', hitShape);
+                            return; // 刷子、橡皮檫和钢笔轨迹不可被拖拽
+                        }
+                        // if(hitShape.type === Shape.Mask){
+                        //     hitShape.active = true;
+                        //     this.highlightMask(hitShapeIndex);
+                        //     return; // 刷子、橡皮檫和钢笔轨迹不可被拖拽
+                        // }
                         hitShape.dragging = true;
                         this.dataset.forEach((item, i) => item.active = i === hitShapeIndex);
                         this.dataset.splice(hitShapeIndex, 1, hitShape);
@@ -518,7 +546,7 @@ export default class CanvasSelect extends EventBus {
                     const ny = Math.round(offsetY - this.originY / this.scale);
                     const newPoint = [nx, ny];
                     this.activeShape.coor.splice(this.ctrlIndex, 1, newPoint); // 修改点坐标
-                }else if (this.activeShape.type === Shape.Circle) {
+                } else if (this.activeShape.type === Shape.Circle) {
                     const nx = Math.round(offsetX - this.originX / this.scale);
                     const newRadius = nx - this.activeShape.coor[0];
                     if (newRadius >= this.MIN_RADIUS) this.activeShape.radius = newRadius;
@@ -559,10 +587,15 @@ export default class CanvasSelect extends EventBus {
                     const ny = Math.round(offsetY - this.originY / this.scale);
                     const newPoint: Point = [nx, ny];
                     this.activeShape.coor.push(newPoint);
+                } else if(this.ispainting && this.createType === Shape.Pencil){
+                    const nx = Math.round(offsetX - this.originX / this.scale);
+                    const ny = Math.round(offsetY - this.originY / this.scale);
+                    const newPoint: Point = [nx, ny];
+                    this.activeShape.coor.push(newPoint);
                 }
             } 
             this.update();
-        } else if ([Shape.Polygon, Shape.Line, Shape.Brush].includes(this.activeShape.type) && this.activeShape.creating) {
+        } else if ([Shape.Polygon, Shape.Line, Shape.Brush, Shape.Pencil].includes(this.activeShape.type) && this.activeShape.creating) {
             // 多边形添加点
             this.update();
         } else if ((!this.isMobile && (e as MouseEvent).buttons === 2 && (e as MouseEvent).which === 3) || (this.isMobile && (e as TouchEvent).touches.length === 1 && !this.isTouch2)) {
@@ -578,8 +611,7 @@ export default class CanvasSelect extends EventBus {
             const cur = this.scaleTouchStore;
             this.scaleTouchStore = Math.abs((touch1.clientX - touch0.clientX) * (touch1.clientY - touch0.clientY));
             this.setScale(this.scaleTouchStore > cur, true);
-        }
-        
+        }   
     }
 
     private handleMouseUp(e: MouseEvent | TouchEvent) {
@@ -629,11 +661,25 @@ export default class CanvasSelect extends EventBus {
                         this.activeShape.coor = this.removeDuplicatePoints(this.activeShape.coor);
                         this.emit('add', this.activeShape);
                     }
-                }
+                } else if(this.createType === Shape.Pencil){                    
+                    if (this.activeShape.coor.length < this.MIN_POINTNUM) {
+                        this.dataset.pop();
+                        this.emit('warn', `Path points cannot be less than ${this.MIN_POINTNUM}`);
+                    } else {
+                        this.activeShape.coor.push([-1, -1]);
+                        this.ispainting = false;
+                        this.activeShape.creating = false;
+                        // 去除重复点
+                        this.activeShape.coor = this.removeDuplicatePoints(this.activeShape.coor);
+                        this.emit('add', this.activeShape);
+                    }
+                } 
                 this.update();
             }
             const condition = ['coor', 'label', 'labelUp', 'lineWidth', 'strokeStyle', 'textFillStyle', 'uuid', 'length'];
             console.log(deepEqual(this.olddataset, this.dataset, condition));
+            console.log("this.olddataset", this.olddataset);
+            console.log("this.dataset", this.dataset);
             if (!deepEqual(this.olddataset, this.dataset, condition)) {
                 this.doneList.push(deepClone(this.dataset));
             }
@@ -752,16 +798,79 @@ export default class CanvasSelect extends EventBus {
         this.imagealpha = alpha;
     }
 
+
+    // 异步处理 Mask 形状的创建
+    async handleMaskShape(item: AllShape, index: number): Promise<AllShape | null> {
+        let tempshape = new Mask(item, index);
+        const maskBase64 = tempshape.maskBase64;
+        const maskImage = new Image();
+        maskImage.crossOrigin = 'Anonymous';
+        maskImage.src = `data:image/png;base64,${maskBase64}`;
+
+        return new Promise((resolve, reject) => {
+            maskImage.onload = () => {
+                const pixels: number[] = [];
+                const pixelData = this.getImagedataFromImageClass(maskImage, "magic");
+
+                if (pixelData) {
+                    // 遍历像素，筛选符合条件的像素点
+                    for (let i = 0; i < pixelData.length; i += 4) {
+                        if (pixelData[i] === 255 && pixelData[i + 1] === 255 && pixelData[i + 2] === 255) {
+                            pixels.push(i);
+                        }
+                    }
+
+                    tempshape.pixels = pixels;
+                    tempshape.height = this.IMAGE_HEIGHT;
+                    tempshape.weight = this.IMAGE_WIDTH;
+                    tempshape.fillStyle = item.fillStyle;
+                    tempshape.strokeStyle = item.strokeStyle;
+                    
+                    // 根据 'maskToPolygon' 判断是否转换为 Polygon 形状
+                    if ('maskToPolygon' in item && item.maskToPolygon && tempshape.maskType === "click") {
+                        this.activeCanvasData = this.putDataOnCanvas(this.canvas, pixels, tempshape.fillStyle, false);
+                        const polygonShape = new Polygon({
+                            coor: this.getContourPointsOfColoredRegion(this.activeCanvasData, 0.5)
+                        }, index);
+                        polygonShape.tagId = item.tagId;
+                        polygonShape.label = item.label;
+                        polygonShape.strokeStyle = item.strokeStyle;
+                        this.activePolygon = polygonShape.uuid;
+                        resolve(polygonShape);
+                    } else {
+                        tempshape.canvasData = this.putDataOnCanvas(this.canvas, pixels, tempshape.fillStyle, true);
+                        tempshape.tagId = item.tagId;
+                        tempshape.label = item.label;
+                        resolve(tempshape);
+                    }
+
+                    // 绘制样本点
+                    this.magicPoints = tempshape.magicPoints;
+                    
+                } else {
+                    console.error("Failed to get pixel data from mask image");
+                    reject(null);  // 如果加载像素数据失败，返回 null
+                }
+            };
+
+            maskImage.onerror = (err) => {
+                console.error("Error loading mask image", err);
+                reject(null);  // 如果加载图像失败，返回 null
+            };
+        });
+    }
+
+
     /**
      * 设置数据
      * @param data Array
      * @param needCreate Boolean 是否需要创建(当传options时需要，当撤销重做操作传dataset时不需要)
      */
-    setData(data: AllShape[], needCreate = true) {
+    setData(data: AllShape[], needCreate = true, toMask:boolean = false) {
         setTimeout(() => {
             if(needCreate) {
                 const initdata: AllShape[] = [];
-                data.forEach((item, index) => {
+                data.forEach(async (item, index) => {
                     if (Object.prototype.toString.call(item).includes('Object')) {
                         let shape: AllShape;
                         switch (item.type) {
@@ -787,14 +896,17 @@ export default class CanvasSelect extends EventBus {
                                 shape = new Brush(item, index);
                                 break;
                             case Shape.Mask:
-                                shape = new Mask(item, index);
+                                shape = await this.handleMaskShape(item, index);
+                                break;
+                            case Shape.Pencil:
+                                shape = new Pencil(item, index);
                                 break;
                             default:
                                 console.warn('Invalid shape', item);
                                 break;
                         }
-                        [Shape.Rect, Shape.Polygon, Shape.Dot, Shape.Line, Shape.Circle, Shape.Grid, Shape.Brush, Shape.Mask].includes(item.type) && initdata.push(shape);
-                    } else {
+                        [Shape.Rect, Shape.Polygon, Shape.Dot, Shape.Line, Shape.Circle, Shape.Grid, Shape.Brush, Shape.Mask , Shape.Pencil].includes(item.type) && initdata.push(shape);
+                    } else { 
                         console.warn('Shape must be an enumerable Object.', item);
                     }
                 });
@@ -802,7 +914,7 @@ export default class CanvasSelect extends EventBus {
             } else {
                 this.dataset = data;
             }
-            this.update();
+            this.update(toMask);
             if (this.doneList.length === 0) {
                 this.doneList.push(deepClone(this.dataset));
             }
@@ -819,14 +931,16 @@ export default class CanvasSelect extends EventBus {
         let hitShape: AllShape;
         for (let i = this.dataset.length - 1; i > -1; i--) {
             const shape = this.dataset[i];
-            if (
+            if (this.isPointInBackground(mousePoint)&&(
                 (shape.type === Shape.Dot && this.isPointInCircle(mousePoint, shape.coor as Point, this.ctrlRadius)) ||
                 (shape.type === Shape.Circle && this.isPointInCircle(mousePoint, shape.coor as Point, (shape as Circle).radius * this.scale)) ||
                 (shape.type === Shape.Rect && this.isPointInRect(mousePoint, (shape as Rect).coor)) ||
                 (shape.type === Shape.Polygon && this.isPointInPolygon(mousePoint, (shape as Polygon).coor)) ||
                 (shape.type === Shape.Line && this.isPointInLine(mousePoint, (shape as Line).coor)) ||
                 (shape.type === Shape.Grid && this.isPointInRect(mousePoint, (shape as Grid).coor)) ||
-                (shape.type === Shape.Brush && this.isPointInLine(mousePoint, (shape as Brush).coor))
+                (shape.type === Shape.Brush && this.isPointInLine(mousePoint, (shape as Brush).coor)) || 
+                (shape.type === Shape.Pencil && this.isPointInPolygon(mousePoint, (shape as Pencil).coor))||
+                (shape.type === Shape.Mask && this.isMouseInPixelsRegion(mousePoint, (shape as Mask).canvasData)))
             ) {
                 if ((this.focusMode && !shape.active) || shape.hiddening) continue;
                 hitShapeIndex = i;
@@ -895,10 +1009,10 @@ export default class CanvasSelect extends EventBus {
                 } else {
                     mouseType = 'ew-resize';
                 }
-            } else if(shape.type === Shape.Brush){
-                mouseType = 'move';
-            } else {
+            } else if(shape.type === Shape.Brush || shape.type === Shape.Pencil || shape.type === Shape.Polygon){
                 mouseType = 'pointer';
+            } else {
+                mouseType = 'move';
             }
         } else {
             mouseType = '';
@@ -1082,6 +1196,171 @@ export default class CanvasSelect extends EventBus {
         this.offScreenCtx.restore();
         return areaData.data[index + 3] !== 0;
     }
+
+    /**
+     * 判断是否在折线内
+     * @param mousePoint 鼠标坐标
+     * @param pixels 像素点索引列表
+     * @returns 布尔值
+     */
+    isMouseInPixelsRegion(mousePoint: Point, canvasData: ImageData): boolean {
+        // 调整鼠标坐标（考虑原点偏移和缩放比例）
+        const mouseX = Math.floor(mousePoint[0] - this.originX); // 缩放并调整鼠标的 x 坐标
+        const mouseY = Math.floor(mousePoint[1]- this.originY); // 缩放并调整鼠标的 y 坐标
+        // console.log(`Adjusted mouse coordinates: (${mouseX}, ${mouseY})`);
+    
+        // 获取指定点的像素数据
+        // 注意canvasData的高宽是向下取整，所以this.IMAGE_WIDTH要统一向下取整
+        const index = (mouseY * Math.floor(this.IMAGE_WIDTH) + mouseX) * 4;
+        const pixelAlpha = canvasData.data[index + 3]; // 获取透明度（alpha 通道）
+    
+        // 判断该点是否在 pixels 区域内
+        if (pixelAlpha !== 0) {
+            // console.log("Mouse is inside the pixel region.");
+            return true; // 如果透明度大于 0，说明该点在像素区域内
+        }
+    
+        // console.log("Mouse is outside the pixel region.");
+        return false; // 否则返回 false
+    }
+
+    getBoundingBoxOfColoredRegion(canvasData: ImageData): Point[] {
+        const data = canvasData.data; // 获取图像的 RGBA 数据
+        const width = canvasData.width; // 图像的宽度
+        const height = canvasData.height; // 图像的高度
+    
+        let xMin = width, xMax = 0, yMin = height, yMax = 0;
+    
+        // 遍历每个像素
+        for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
+                // 每个像素的 RGBA 数据索引
+                const index = (y * width + x) * 4;
+    
+                const r = data[index]; // 红色通道
+                const g = data[index + 1]; // 绿色通道
+                const b = data[index + 2]; // 蓝色通道
+                const a = data[index + 3]; // alpha 通道（透明度）
+    
+                // 判断该像素是否有颜色（alpha不为0或RGB有非零值）
+                if (a !== 0 && (r !== 255 || g !== 255 || b !== 255)) {
+                    // 更新最小和最大坐标
+                    xMin = Math.min(xMin, x);
+                    xMax = Math.max(xMax, x);
+                    yMin = Math.min(yMin, y);
+                    yMax = Math.max(yMax, y);
+                }
+            }
+        }
+    
+        // 如果没有找到有颜色的像素，返回一个无效的矩形
+        if (xMin > xMax || yMin > yMax) {
+            return [];
+        }
+    
+        return [[Math.round(xMin/this.scale), Math.round(yMin/this.scale)], [Math.round(xMax/this.scale), Math.round(yMax /this.scale)]];
+    }
+    
+
+    // 提取图像的轮廓点
+    getContourPointsOfColoredRegion(canvasData: ImageData, densityFactor: number = 1): Point[] {
+        const data = canvasData.data; // 获取图像的 RGBA 数据
+        const width = canvasData.width; // 图像的宽度
+        const height = canvasData.height; // 图像的高度
+        
+        const contourPoints: Point[] = [];
+        
+        // 遍历每个像素，寻找有颜色的区域，并根据阈值决定是否为轮廓点
+        for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
+                const index = (y * width + x) * 4;
+                const r = data[index]; // 红色通道
+                const g = data[index + 1]; // 绿色通道
+                const b = data[index + 2]; // 蓝色通道
+                const a = data[index + 3]; // alpha 通道（透明度）
+
+                // 判断是否为轮廓点：该点周围至少有一个邻居透明度为0的点
+                if (a !== 0 && (r !== 255 || g !== 255 || b !== 255)) {
+                    const isBorderPoint = this.isBorderPoint(x, y, width, height, data);
+                    if (isBorderPoint) {
+                        contourPoints.push([Math.round(x / this.scale), Math.round(y / this.scale)]);
+                    }
+                }
+            }
+        }
+
+        // 去除重复点
+        const uniquePoints = this.removeDuplicatePoints(contourPoints);
+
+        // 根据密度因子控制疏密程度
+        const sampledPoints = this.samplePointsByDensity(uniquePoints, densityFactor);
+
+        // 按照顺时针方向以质心为中心排序
+        return this.sortByPolarAngle(sampledPoints);
+    }
+
+    // 判断一个点是否是轮廓点
+    isBorderPoint(x: number, y: number, width: number, height: number, data: Uint8ClampedArray): boolean {
+        const directions = [
+            [-1, 0], [1, 0], [0, -1], [0, 1], // 四个方向
+            [-1, -1], [-1, 1], [1, -1], [1, 1] // 四个对角线方向
+        ];
+
+        for (const [dx, dy] of directions) {
+            const nx = x + dx;
+            const ny = y + dy;
+            if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+                const index = (ny * width + nx) * 4;
+                const alpha = data[index + 3]; // 获取邻点的透明度
+                if (alpha === 0) {
+                    return true; // 如果邻点是透明的，那么该点为轮廓点
+                }
+            }
+        }
+        return false;
+    }
+
+    // 根据密度因子采样轮廓点
+    samplePointsByDensity(points: Point[], densityFactor: number): Point[] {
+        const sampledPoints: Point[] = [];
+        const step = Math.max(1, Math.floor(1 / densityFactor)); // 控制每隔多少个点采样一次
+    
+        for (let i = 0; i < points.length; i += step) {
+            sampledPoints.push(points[i]);
+        }
+    
+        return sampledPoints;
+    }
+
+    // 计算质心
+    calculateCentroid(points: Point[]): Point {
+        let sumX = 0;
+        let sumY = 0;
+        for (let point of points) {
+            sumX += point[0];
+            sumY += point[1];
+        }
+        const count = points.length;
+        return [sumX / count, sumY / count]; // 计算质心坐标
+    }
+
+    // 计算极角
+    calculatePolarAngle(center: Point, point: Point): number {
+        const dx = point[0] - center[0];
+        const dy = point[1] - center[1];
+        return Math.atan2(dy, dx); // 返回的值是 -PI 到 PI
+    }
+
+    // 按极角排序轮廓点
+    sortByPolarAngle(points: Point[]): Point[] {
+        const center = this.calculateCentroid(points); // 计算质心
+        return points.sort((a, b) => {
+            const angleA = this.calculatePolarAngle(center, a);
+            const angleB = this.calculatePolarAngle(center, b);
+            return angleA - angleB; // 从小到大排序（顺时针）
+        });
+    }
+
 
     /**
        * 判断是图形是否属于嵌套关系 (目前只支持矩形和多边形)
@@ -1309,53 +1588,33 @@ export default class CanvasSelect extends EventBus {
         this.ctx.lineJoin = 'round';
         this.ctx.lineCap = 'round';
         this.ctx.lineWidth = lineWidth || this.brushlineWidth;
-        this.ctx.strokeStyle = (active || creating) ? (strokeStyle || this.brushstrokeStyle) : (strokeStyle || this.brushstrokeStyle);
-        this.ctx.fillStyle = (active || creating) ? (strokeStyle || this.brushstrokeStyle) : (strokeStyle || this.brushstrokeStyle);
 
         // 应用缩放
         this.ctx.scale(this.scale, this.scale);
 
-        if (coor.length > 0) {
-            for(let i = 0; i < coor.length; i++){
-                this.ctx.beginPath();
-                this.ctx.moveTo(coor[i][0], coor[i][1]);
-                if(i + 1 < coor.length){
-                    this.ctx.lineTo(coor[i+1][0], coor[i+1][1]);
-                }
-                if(iseraser){
-                    this.ctx.globalCompositeOperation = 'destination-out';
-                } else {
-                    this.ctx.globalCompositeOperation = 'source-over';
-                }
-                this.ctx.stroke();
-                this.ctx.beginPath();
-                this.ctx.arc(coor[i][0], coor[i][1], this.ctx.lineWidth / 2, 0, Math.PI * 2);
-                this.ctx.fill();
+        if (coor.length > 1) { // 至少两个点才能绘制路径
+            if (iseraser) {
+                // 设置颜色，包含透明度
+                this.ctx.strokeStyle = "rgba(255, 0, 0, 1)";
+                this.ctx.fillStyle = "rgba(255, 0, 0, 1)";
+                this.ctx.globalCompositeOperation = 'destination-out'; // 橡皮擦效果
+            } else {
+                const color = (active || creating) ? (strokeStyle || this.brushstrokeStyle) : (strokeStyle || this.brushstrokeStyle);
+                this.ctx.strokeStyle = color;
+                this.ctx.fillStyle = color;
+                this.ctx.globalCompositeOperation = 'source-over'; 
             }
+    
+            this.ctx.beginPath();
+            this.ctx.moveTo(coor[0][0], coor[0][1]); // 从第一个点开始
+    
+            for (let i = 1; i < coor.length; i++) {
+                this.ctx.lineTo(coor[i][0], coor[i][1]); // 绘制到下一个点
+            }
+    
+            this.ctx.stroke();
         }
         this.ctx.restore();
-    }
-
-    // 判断两个点是否接近（是否重叠）
-    arePointsClose(p1: Point, p2: Point) {
-        const dx = p1[0] - p2[0];
-        const dy = p1[1] - p2[1];
-        return Math.sqrt(dx * dx + dy * dy) < this.eraserSize;
-    }
-
-    // 去除与橡皮擦重叠的点
-    removeOverlap(path: Point[], eraserPoint: Point) {
-        return path.filter(point => !this.arePointsClose(point, eraserPoint));
-    }
-
-    // 橡皮擦模式：在(x, y)处擦除路径上的点
-    eraseAtPoint(point: Point) {
-        for(let i = 0; i < this.dataset.length; i++){
-            if(this.dataset[i].type === Shape.Brush){
-                this.dataset[i].coor = this.removeOverlap(this.dataset[i].coor, point);
-            }
-        }
-        this.update(); // 擦除后重绘画布
     }
 
     /**
@@ -1408,6 +1667,13 @@ export default class CanvasSelect extends EventBus {
      */
     drawCtrlList(shape: Rect | Polygon | Line) {
         shape.ctrlsData.forEach((point, i) => {
+            if((shape.type === Shape.Polygon || shape.type === Shape.Line) && (i === this.ctrlIndex || i === this.clickIndex)){
+                this.ctrlStrokeStyle = 'red';
+                this.ctrlRadius = 5;
+            } else {
+                this.ctrlStrokeStyle = '#000';
+                this.ctrlRadius = 3;
+            }
             if (shape.type === Shape.Circle) {
                 if (i === 1) this.drawCtrl(point);
             } else {
@@ -1481,7 +1747,7 @@ export default class CanvasSelect extends EventBus {
                     maskData[i] = this.random_color[colorIndex].r; // red
                     maskData[i + 1] = this.random_color[colorIndex].g; // green
                     maskData[i + 2] = this.random_color[colorIndex].b; // blue
-                    maskData[i + 3] = this.alpha_255; // alpha
+                    maskData[i + 3] = this.mask_alpha; // alpha
                 }
             }
             maskContext.putImageData(imageMask, 0, 0);
@@ -1518,28 +1784,32 @@ export default class CanvasSelect extends EventBus {
         return scaledImageData.data;
     }
 
-    putDataOnCanvas(thisCanvas: HTMLCanvasElement, pixels: number[]) {
+    putDataOnCanvas(thisCanvas: HTMLCanvasElement, pixels: number[], fillStyle: string, putImageData: boolean = true) {
         const thisContext = thisCanvas.getContext("2d", { willReadFrequently: true });
         if (!thisContext) { return; }
         const canvasData = thisContext.getImageData(this.originX, this.originY, this.IMAGE_WIDTH, this.IMAGE_HEIGHT);
         const data = canvasData.data;
-        const replacementColor = { r: 147, g: 112, b: 219 };
+        const rgbaRegex = /rgba?\((\d+), (\d+), (\d+)(?:, ([0-9.]+))?\)/;
+        const replacementColor = fillStyle.match(rgbaRegex);
         
         for (let i = 0; i < pixels.length; i += 1) {
-            data[pixels[i]] = replacementColor.r; // red
-            data[pixels[i] + 1] = replacementColor.g; // green
-            data[pixels[i] + 2] = replacementColor.b; // blue
-            data[pixels[i] + 3] = 64; // alpha
+            data[pixels[i]] = parseInt(replacementColor[1], 10); // red
+            data[pixels[i] + 1] = parseInt(replacementColor[2], 10); // green
+            data[pixels[i] + 2] = parseInt(replacementColor[3], 10); // blue
+            data[pixels[i] + 3] = (replacementColor[4] !== undefined ? parseFloat(replacementColor[4]) : 0.5) * 255; // alpha
         }
-        thisContext.putImageData(canvasData, this.originX, this.originY);
+        if(putImageData){
+            thisContext.putImageData(canvasData, this.originX, this.originY);
+        }
+        return canvasData;
     };
 
-    drawPromptPointOnClick = (thisPrompt: Prompt, canvas: HTMLCanvasElement): void => {
-        const x = thisPrompt.origPoint[0];
-        const y = thisPrompt.origPoint[1];
+    drawPromptPointOnClick = (thisPrompt: MagicPoint, canvas: HTMLCanvasElement): void => {
+        const x = (thisPrompt.coor[0]) * this.scale;
+        const y = (thisPrompt.coor[1]) * this.scale;
         
         const fillColor = `rgba(255, 255, 255, 0.75)`;
-        const strokeColor = thisPrompt.type ? `green` : `red`;
+        const strokeColor = thisPrompt.color;
         
         const context = canvas.getContext("2d", { willReadFrequently: true });
         if (!context) return;
@@ -1553,11 +1823,60 @@ export default class CanvasSelect extends EventBus {
     };
 
     /**
+     * 高亮Mask
+     * @param index Mask的索引
+     * @param highlight 是否高亮
+     * @returns
+     */
+    highlightMask(index: number) {
+        let activeColor = '';
+        if(index>-1){
+            const shape = this.dataset[index];
+            activeColor = shape.fillStyle.replace(/rgba\((\d+), (\d+), (\d+), (\d+(\.\d+)?)\)/, (match, r, g, b, a) => {
+                return `rgba(${r}, ${g}, ${b}, 0.75)`;
+            });
+            shape.fillStyle = activeColor;
+            // this.update();
+        } else {
+            // let state = false;
+            for(let i=0; i<this.dataset.length; i++){
+                if(this.dataset[i].type === Shape.Mask){
+                    activeColor = this.dataset[i].fillStyle.replace(/rgba\((\d+), (\d+), (\d+), (\d+(\.\d+)?)\)/, (match, r, g, b, a) => {
+                        return `rgba(${r}, ${g}, ${b}, 0.5)`;
+                    });
+                    this.dataset[i].fillStyle = activeColor;
+                    // state = true;
+                }
+            }
+            // if(state){
+            //     this.update();
+            // } 
+        }
+        this.update(); // 此处，一方面用于更新Mask高亮；另一方面用于更新控制点加粗变红
+    }
+
+    changeMaskPolygon(densityFactor: number) {
+        const polygonShape = this.dataset.find(item => item.uuid === this.activePolygon);
+        polygonShape.coor = this.getContourPointsOfColoredRegion(this.activeCanvasData, densityFactor);
+        this.update();
+    }
+
+    endMagicTool() {
+        this.doneList.push(deepClone(this.dataset));
+    }
+
+
+    /**
      * 绘制Mask
      * @param shape 标注实例
      * @returns
      */
     drawMask(shape: Mask) {
+        if (shape.pixels.length !== 0 && shape.height===this.IMAGE_HEIGHT && shape.weight===this.IMAGE_WIDTH){
+            this.putDataOnCanvas(this.canvas, shape.pixels, shape.fillStyle);
+            // console.log(shape.pixels);
+            return;
+        }
         const maskBase64 = shape.maskBase64;
         // 将 base64 转换为图像
         const maskImage = new Image();
@@ -1582,7 +1901,7 @@ export default class CanvasSelect extends EventBus {
                             data[i] = color.r; // red
                             data[i + 1] = color.g; // green
                             data[i + 2] = color.b; // blue
-                            data[i + 3] = 192; // alpha
+                            data[i + 3] = this.mask_alpha; // alpha
                         }
                     }
             
@@ -1590,30 +1909,29 @@ export default class CanvasSelect extends EventBus {
                     self.ctx.putImageData(canvasData, self.originX, self.originY);
                 }
             } else if (shape.maskType === "click"){
-                const pixels: number[] = [];
+                const pixels: number[] = []; // 保存所有符合条件的像素的索引位置
                 const pixelData = self.getImagedataFromImageClass(maskImage, "magic");
 
                 if (pixelData) {
-                  console.log(pixelData.length);
+                //   console.log(pixelData.length);
                   // Get the pixel indices of the mask
                   for (let i = 0; i < pixelData.length; i += 4) {
                     if (pixelData[i] === 255 && pixelData[i + 1] === 255 && pixelData[i + 2] === 255) {
                       pixels.push(i);
                     }
                   }
-                  console.log(pixels.length);
-        
-                  // Step 4: Put magic mask on canvas
-                  // redrawPaths(canvasRef.value, drawnPaths);
-                  // instance.deleteAllShape();
-                  self.putDataOnCanvas(self.canvas, pixels);
+                //   console.log(pixels.length);
+                //   console.log("self.IMAGE_HEIGHT", self.IMAGE_HEIGHT);
+                //   console.log("self.IMAGE_WIDTH", self.IMAGE_WIDTH);
 
-                  for (const thisPrompt of shape.promptPoints) {
-                    self.drawPromptPointOnClick(thisPrompt, self.canvas);
-                  }
+                  shape.pixels = pixels;
+                  shape.height = self.IMAGE_HEIGHT;
+                  shape.weight = self.IMAGE_WIDTH;
+                  shape.fillStyle = shape.strokeStyle;
         
-                  // Step 5: Add the magic mask to drawnPaths array
-                //   interactivePaths.push(pixels);
+
+                  shape.canvasData = self.putDataOnCanvas(self.canvas, pixels, shape.fillStyle);
+        
                 } else {
                   console.error("Failed to get pixel data from mask image");
                 }
@@ -1623,6 +1941,96 @@ export default class CanvasSelect extends EventBus {
         };
     }
 
+
+    addPoint() {
+        const shape = this.activeShape;
+        if(Object.keys(shape).length !== 0 && this.clickIndex > -1 && !this.readonly){
+            const [x, y] = this.activeShape.coor[this.clickIndex];
+            const nx = Math.round(x + 3);
+            const ny = Math.round(y + 3);
+            shape.coor.splice(this.clickIndex + 1, 0, [nx, ny]);
+            this.clickIndex++;
+            this.update();
+            this.doneList.push(deepClone(this.dataset));
+        }
+    }
+
+
+    deletePoint() {
+        const shape = this.activeShape;
+        if(Object.keys(shape).length !== 0 && shape.coor.length>3 && this.clickIndex > -1 && !this.readonly){
+            shape.coor.splice(this.clickIndex, 1);
+            this.update();
+            this.doneList.push(deepClone(this.dataset));
+        }
+    }
+
+
+
+    /**
+     * 绘制路径线段
+     * @param shape 标注实例
+     * @returns
+     */
+    drawPencil(shape: Pencil) {
+        const { strokeStyle, active, creating, coor, lineWidth } = shape;
+    
+        // 保存上下文状态
+        this.ctx.save();
+    
+        // 设置绘制样式
+        this.ctx.lineJoin = 'round'; // 线条连接处圆角处理
+        this.ctx.lineCap = 'round';  // 线条端点圆角处理
+        this.ctx.lineWidth = lineWidth || this.pencillineWidth; // 设置线条宽度
+    
+        // 设置颜色，包含透明度
+        const color = (active || creating) ? (strokeStyle || this.pencilstrokeStyle) : (strokeStyle || this.pencilstrokeStyle);
+        this.ctx.strokeStyle = color;
+        this.ctx.fillStyle = color;
+    
+        // 应用缩放
+        this.ctx.scale(this.scale, this.scale);
+    
+        // 如果有足够的点进行绘制
+        if (coor.length > 1) {
+            // 检查是否有结束标志点 (-1, -1)
+            const hasEndPoint = coor.some(point => point[0] === -1 && point[1] === -1);
+    
+            // 过滤掉结束标志点
+            const validCoor = coor.filter(point => !(point[0] === -1 && point[1] === -1));
+    
+            if (validCoor.length > 1) {
+                // 设置全局组合操作
+                this.ctx.globalCompositeOperation = 'source-over'; // 默认绘制模式
+    
+                // 开始路径
+                this.ctx.beginPath();
+                this.ctx.moveTo(validCoor[0][0], validCoor[0][1]); // 从第一个点开始
+    
+                // 遍历有效坐标绘制线段
+                for (let i = 1; i < validCoor.length; i++) {
+                    this.ctx.lineTo(validCoor[i][0], validCoor[i][1]); // 绘制到下一个点
+                }
+    
+                // 如果有结束标志点，则首尾相连
+                if (hasEndPoint) {
+                    this.ctx.closePath(); // 首尾相连
+                }
+    
+                // 绘制路径
+                this.ctx.stroke();
+    
+                // 如果路径闭合，填充封闭区域
+                if (hasEndPoint) {
+                    this.ctx.clip(); // 限制填充区域到路径范围
+                    this.ctx.fill();
+                }
+            }
+        }
+    
+        // 恢复上下文状态
+        this.ctx.restore();
+    }
 
     /**
      * 绘制label
@@ -1699,16 +2107,37 @@ export default class CanvasSelect extends EventBus {
     /**
      * 更新画布
      */
-    update() {
+    update(toMask: boolean = false) {
         window.cancelAnimationFrame(this.timer);
         this.timer = window.requestAnimationFrame(() => {
             this.ctx.save();
             this.ctx.clearRect(0, 0, this.WIDTH, this.HEIGHT);
             this.ctx.translate(this.originX, this.originY); // 位置映射，（0,0）对应着（this.originX, this.originY）
             if (this.IMAGE_WIDTH && this.IMAGE_HEIGHT) {
-                this.ctx.globalAlpha = this.imagealpha;
-                this.ctx.drawImage(this.image, 0, 0, this.IMAGE_WIDTH, this.IMAGE_HEIGHT);
-                this.ctx.globalAlpha = 1.0;
+                if(toMask){
+                    // 获取图像的像素数据
+                    const imageData = this.ctx.getImageData(0, 0, this.IMAGE_WIDTH, this.IMAGE_HEIGHT);
+                    const data = imageData.data;
+
+                    // 将所有像素的 RGB 值设置为 0 (黑色)
+                    for (let i = 0; i < data.length; i += 4) {
+                        data[i] = 0;     // Red
+                        data[i + 1] = 0; // Green
+                        data[i + 2] = 0; // Blue
+                        data[i + 3] = 255;// alpha
+                    }
+
+                    // 将修改后的像素数据重新放回画布
+                    this.ctx.putImageData(imageData, this.originX, this.originY);
+                } else {
+                    if(this.imagealpha === 1){
+                        this.ctx.drawImage(this.image, 0, 0, this.IMAGE_WIDTH, this.IMAGE_HEIGHT);
+                    }
+                    // this.ctx.globalAlpha = this.imagealpha;
+                    // this.ctx.drawImage(this.image, 0, 0, this.IMAGE_WIDTH, this.IMAGE_HEIGHT);
+                    // this.ctx.globalAlpha = 1.0;
+                }
+
             }
             // 专注模式下，只显示选中图形
             const renderList = this.focusMode ? (this.activeShape.type ? [this.activeShape] : []) : this.dataset;
@@ -1740,12 +2169,21 @@ export default class CanvasSelect extends EventBus {
                     case Shape.Mask:
                         this.drawMask(shape as Mask);
                         break;
+                    case Shape.Pencil:
+                        this.drawPencil(shape as Pencil);
+                        break;
                     default:
                         break;
                 }
             }
             if ([Shape.Rect, Shape.Polygon, Shape.Line, Shape.Circle, Shape.Grid].includes(this.activeShape.type) && !this.activeShape.hiddening) {
                 this.drawCtrlList(this.activeShape);
+            }
+            // 绘制智能标注点
+            if (this.magicPoints.length) {
+                for (const thisPrompt of this.magicPoints) {
+                    this.drawPromptPointOnClick(thisPrompt, this.canvas);
+                }
             }
             this.ctx.restore();
             this.emit('updated', this.dataset);
@@ -1821,28 +2259,35 @@ export default class CanvasSelect extends EventBus {
                 } else if (prop === 'tagId') {
                     item.tagId = tagId;
                 } else if (prop === 'strokeStyle') {
-                    if(item.type === 7 && this.isRGBA(color)){
-                        item.strokeStyle = this.rgbaToHex(color);
-                    } else {
+                    // if(item.type === 7 && this.isRGBA(color)){
+                    //     item.strokeStyle = this.rgbaToHex(color);
+                    // } else {
                         item.strokeStyle = color;
-                    }
+                    // }
                 } else if (prop === 'textFillStyle') {
                     item.textFillStyle = color;
                 } else if (prop === 'fillStyle') {
-                    if(item.type === 7 && this.isRGBA(color)){
-                        item.fillStyle = this.rgbaToHex(color);
-                    } else {
+                    // if(item.type === 7 && this.isRGBA(color)){
+                    //     item.fillStyle = this.rgbaToHex(color);
+                    // } else {
                         item.fillStyle = color;
-                    }
+                    // }
                 }
             });
         };
     
         if (index !== -1) {
             updateProperties(this.dataset[index]);
+            if (this.dataset[index].type === Shape.Pencil) {
+                this.emit('updateLabel', this.dataset[index]);
+            }
         } else {
-            if (this.activeShape) {
+            // 注意:不能使用if(this.activeShape)判断，会始终为true
+            if (Object.keys(this.activeShape).length !== 0) {
                 updateProperties(this.activeShape);
+                if (this.activeShape.type === Shape.Pencil) {
+                    this.emit('updateLabel', this.activeShape);
+                }
             }
         }
     
