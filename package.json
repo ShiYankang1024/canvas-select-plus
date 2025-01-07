@@ -1,7 +1,7 @@
 {
   "name": "canvas-select-plus",
   "version": "2.23.24",
-  "description": "在canvas-select的基础上，添加了清空、复制、撤销、重做、隐藏、显示和鼠标样式变化等功能，尚在开发和维护中...",
+  "description": "一款基于canvas的2D图像标注工具，在canvas-select的基础上，添加了清空、复制、撤销、重做、隐藏、显示和鼠标样式变化等功能，尚在开发和维护中...",
   "main": "lib/canvas-select.min.js",
   "types": "lib/src/index.d.ts",
   "type": "module",
@@ -26,7 +26,7 @@
     "隐藏",
     "显示",
     "鼠标样式变化",
-    "画笔、橡皮檫",
+    "刷子、橡皮檫",
     "保存图片",
     "分割一切（需后端接口支持）",
     "智能标注（需后端接口支持）",
