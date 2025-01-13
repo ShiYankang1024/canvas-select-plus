@@ -108,6 +108,7 @@
         <br />  
         <button onclick="instance.addPoint(instance.activeShape)">添加点</button>
         <button onclick="instance.deletePoint(instance.activeShape)">删除点</button>
+        <button onclick="instance.resize(1000, 404, 0.5)">改变尺canvas尺寸</button>
         <br />  
         <!-- 滑动条 -->
         <input type="range" id="slider" min="0" max="0.3" value="0.15" step="0.05" oninput="onSliderChange(event)" />
@@ -160,7 +161,7 @@
     instance.resize(1500, 804, 0);
     instance_img.resize(1500, 804);
 
-    instance.readonly = true;
+    // instance.readonly = true;
     
     // 处理颜色选择器的 change 事件
     function handleColorChange(input) {
@@ -253,6 +254,7 @@
       console.log('图片加载完成', src);
       instance.labelFontSize = 30;
       instance.brushlineWidth = 30;
+      instance.activeStrokeStyle = "rgba(0, 0, 255, 0.6)";
       console.log("this.ctx.font", instance.ctx.font);
       instance.densityFactor = 15;
       instance.setData(option);
