@@ -102,6 +102,7 @@ export default class CanvasSelect extends EventBus {
   /** 所有标注数据 */
   dataset: AllShape[] = [];
 
+  /** 撤销数组最多保存记录条数 */
   MAX_LENGTH = 6;
 
   // 保存一次完成的修改后的记录(触发按钮事件或鼠标抬起)
@@ -452,13 +453,31 @@ export default class CanvasSelect extends EventBus {
             }
             if (hitShape.type === Shape.Brush) {
               if ("iseraser" in hitShape && !hitShape.iseraser) {
-                hitShape.active = true;
+                this.dataset.forEach(
+                  (item, i) => (item.active = i === hitShapeIndex)
+                );
+                // if (this.activeShape.boundingRect.length === 0) {
+                //   this.activeShape.boundingRect = this.removeDuplicatePoints(
+                //     hitShape.coor,
+                //     true,
+                //     false
+                //   ).resultRect;
+                // }
                 this.emit("select", hitShape);
               }
               return; // 刷子、橡皮檫和钢笔轨迹不可被拖拽
             }
             if (hitShape.type === Shape.Pencil) {
-              hitShape.active = true;
+              this.dataset.forEach(
+                (item, i) => (item.active = i === hitShapeIndex)
+              );
+              // if (this.activeShape.boundingRect.length === 0) {
+              //   this.activeShape.boundingRect = this.removeDuplicatePoints(
+              //     hitShape.coor,
+              //     true,
+              //     false
+              //   ).resultRect;
+              // }
               this.emit("select", hitShape);
               return; // 刷子、橡皮檫和钢笔轨迹不可被拖拽
             }
@@ -735,6 +754,24 @@ export default class CanvasSelect extends EventBus {
     }
     this.remmber = [];
     if (this.activeShape.type !== Shape.None && !this.isCtrlKey) {
+      // if (this.activeShape.dragging) {
+      //   this.activeShape.truncated = 0;
+      //   for (let i = 0; i < this.dataset.length; i++) {
+      //     if (
+      //       this.dataset[i].type === Shape.Rect &&
+      //       this.dataset[i].index !== this.activeShape.index
+      //     ) {
+      //       if (
+      //         this.dataset[i].coor[1][0] > this.activeShape.coor[0][0] &&
+      //         this.dataset[i].coor[0][0] < this.activeShape.coor[1][0] &&
+      //         this.dataset[i].coor[1][1] > this.activeShape.coor[0][1] &&
+      //         this.dataset[i].coor[0][1] < this.activeShape.coor[1][1]
+      //       ) {
+      //         this.activeShape.truncated = 1;
+      //       }
+      //     }
+      //   }
+      // }
       this.activeShape.dragging = false;
       if (this.activeShape.creating) {
         if ([Shape.Rect, Shape.Grid].includes(this.activeShape.type)) {
@@ -754,6 +791,22 @@ export default class CanvasSelect extends EventBus {
               [Math.max(x0, x1), Math.max(y0, y1)]
             ];
             this.activeShape.creating = false;
+            this.activeShape.truncated = 0;
+            for (let i = 0; i < this.dataset.length; i++) {
+              if (
+                this.dataset[i].type === Shape.Rect &&
+                this.dataset[i].index !== this.activeShape.index
+              ) {
+                if (
+                  this.dataset[i].coor[1][0] > this.activeShape.coor[0][0] &&
+                  this.dataset[i].coor[0][0] < this.activeShape.coor[1][0] &&
+                  this.dataset[i].coor[1][1] > this.activeShape.coor[0][1] &&
+                  this.dataset[i].coor[0][1] < this.activeShape.coor[1][1]
+                ) {
+                  this.activeShape.truncated = 1;
+                }
+              }
+            }
             this.emit("add", this.activeShape);
           }
         } else if (this.activeShape.type === Shape.Circle) {
@@ -775,9 +828,12 @@ export default class CanvasSelect extends EventBus {
             this.ispainting = false;
             this.activeShape.creating = false;
             // 去除重复点
-            this.activeShape.coor = this.removeDuplicatePoints(
-              this.activeShape.coor
+            const { resultCoor, resultRect } = this.removeDuplicatePoints(
+              this.activeShape.coor,
+              true
             );
+            this.activeShape.coor = resultCoor;
+            this.activeShape.boundingRect = resultRect;
             this.emit("add", this.activeShape);
           }
         } else if (this.createType === Shape.Pencil) {
@@ -792,9 +848,12 @@ export default class CanvasSelect extends EventBus {
             this.ispainting = false;
             this.activeShape.creating = false;
             // 去除重复点
-            this.activeShape.coor = this.removeDuplicatePoints(
-              this.activeShape.coor
+            const { resultCoor, resultRect } = this.removeDuplicatePoints(
+              this.activeShape.coor,
+              true
             );
+            this.activeShape.coor = resultCoor;
+            this.activeShape.boundingRect = resultRect;
             this.emit("add", this.activeShape);
           }
         }
@@ -1079,6 +1138,11 @@ export default class CanvasSelect extends EventBus {
                 break;
               case Shape.Brush:
                 shape = new Brush(item, index);
+                // shape.boundingRect = this.removeDuplicatePoints(
+                //   shape.coor,
+                //   true,
+                //   false
+                // ).resultRect;
                 break;
               case Shape.Mask:
                 shape = await this.handleMaskShape(item, index); // 处理异步操作
@@ -1525,7 +1589,10 @@ export default class CanvasSelect extends EventBus {
     }
 
     // 去除重复点
-    const uniquePoints = this.removeDuplicatePoints(contourPoints);
+    const uniquePoints = this.removeDuplicatePoints(
+      contourPoints,
+      false
+    ).resultCoor;
 
     // 根据密度因子控制疏密程度
     const sampledPoints = this.samplePointsByDensity(
@@ -1854,19 +1921,89 @@ export default class CanvasSelect extends EventBus {
     return rgbaRegex.test(color);
   }
 
-  removeDuplicatePoints(points: [number, number][]) {
+  removeDuplicatePoints(
+    points: [number, number][],
+    getBunding: boolean = false,
+    removePoints: boolean = true
+  ) {
     const seen = new Set();
     const uniquePoints: [number, number][] = [];
+    let maxX = points[0][0],
+      minX = points[0][0],
+      maxY = points[0][1],
+      minY = points[0][1];
 
-    points.forEach((point) => {
-      const key = `${point[0]},${point[1]}`;
-      if (!seen.has(key)) {
-        seen.add(key);
-        uniquePoints.push(point);
+    if (!removePoints) {
+      if (getBunding) {
+        points.forEach((point) => {
+          // 计算最大最小值
+          if (point[0] !== -1 && point[1] !== -1) {
+            maxX = Math.max(maxX, point[0]);
+            maxY = Math.max(maxY, point[1]);
+            minX = Math.min(minX, point[0]);
+            minY = Math.min(minY, point[1]);
+          }
+        });
+        if (this.activeShape.type === Shape.Brush) {
+          return {
+            resultRect: [
+              minX - this.brushlineWidth / 2,
+              minY - this.brushlineWidth / 2,
+              maxX - minX + this.brushlineWidth,
+              maxY - minY + this.brushlineWidth
+            ]
+          };
+        } else {
+          return {
+            resultRect: [minX, minY, maxX - minX, maxY - minY]
+          };
+        }
       }
-    });
-
-    return uniquePoints;
+    } else {
+      if (getBunding) {
+        points.forEach((point) => {
+          // 坐标点去重
+          const key = `${point[0]},${point[1]}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            uniquePoints.push(point);
+          }
+          // 计算最大最小值
+          if (getBunding && point[0] !== -1 && point[1] !== -1) {
+            maxX = Math.max(maxX, point[0]);
+            maxY = Math.max(maxY, point[1]);
+            minX = Math.min(minX, point[0]);
+            minY = Math.min(minY, point[1]);
+          }
+        });
+        if (this.activeShape.type === Shape.Brush) {
+          return {
+            resultCoor: uniquePoints,
+            resultRect: [
+              minX - this.brushlineWidth / 2,
+              minY - this.brushlineWidth / 2,
+              maxX - minX + this.brushlineWidth,
+              maxY - minY + this.brushlineWidth
+            ]
+          };
+        } else {
+          return {
+            resultCoor: uniquePoints,
+            resultRect: [minX, minY, maxX - minX, maxY - minY]
+          };
+        }
+      } else {
+        points.forEach((point) => {
+          // 坐标点去重
+          const key = `${point[0]},${point[1]}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            uniquePoints.push(point);
+          }
+        });
+        return { resultCoor: uniquePoints };
+      }
+    }
   }
 
   /**
@@ -1874,7 +2011,15 @@ export default class CanvasSelect extends EventBus {
    * @param shape 轨迹实例
    */
   drawBrush(shape: Brush) {
-    const { strokeStyle, active, creating, coor, lineWidth, iseraser } = shape;
+    const {
+      strokeStyle,
+      active,
+      creating,
+      coor,
+      lineWidth,
+      iseraser,
+      boundingRect
+    } = shape;
     this.ctx.save();
     this.ctx.lineJoin = "round";
     this.ctx.lineCap = "round";
@@ -1908,6 +2053,15 @@ export default class CanvasSelect extends EventBus {
       }
 
       this.ctx.stroke();
+
+      if (active && this.activeShape.boundingRect.length > 0) {
+        const [x, y, w, h] = this.activeShape.boundingRect;
+        this.ctx.lineWidth = 1;
+        this.ctx.strokeStyle = this.activeStrokeStyle;
+        this.ctx.beginPath();
+        this.ctx.strokeRect(x, y, w, h);
+        this.ctx.stroke();
+      }
     }
     this.ctx.restore();
   }
@@ -2400,18 +2554,24 @@ export default class CanvasSelect extends EventBus {
         if (hasEndPoint) {
           this.ctx.closePath(); // 首尾相连
         }
+      }
 
-        // 绘制路径
-        this.ctx.stroke();
+      if (active && this.activeShape.boundingRect.length > 0) {
+        const [x, y, w, h] = this.activeShape.boundingRect;
+        this.ctx.lineWidth = 1;
+        this.ctx.strokeStyle = this.activeStrokeStyle;
+        this.ctx.strokeRect(x, y, w, h);
+      }
 
-        // 如果路径闭合，填充封闭区域
-        if (hasEndPoint) {
-          this.ctx.clip(); // 限制填充区域到路径范围
-          this.ctx.fill();
-        }
+      // 绘制路径
+      this.ctx.stroke();
+
+      // 如果路径闭合，填充封闭区域
+      if (hasEndPoint) {
+        this.ctx.clip(); // 限制填充区域到路径范围
+        this.ctx.fill();
       }
     }
-
     // 恢复上下文状态
     this.ctx.restore();
   }
@@ -2438,10 +2598,7 @@ export default class CanvasSelect extends EventBus {
     const currLineWidth = lineWidth || this.lineWidth;
 
     if (label.length && !isHideLabel) {
-      this.ctx.font =
-        labelFontSize && labelFontFamily
-          ? `${labelFontSize}px ${labelFontFamily}`
-          : `${this.labelFontSize}px ${this.labelFontFamily}`;
+      // 设置字体大小为矩形高度的一个比例
       const textPaddingLeft = 4;
       const textPaddingTop = 4;
       const newText =
@@ -2450,14 +2607,18 @@ export default class CanvasSelect extends EventBus {
           : `${label.slice(0, this.labelMaxLen)}...`;
       const text = this.ctx.measureText(newText);
       const font = parseInt(this.ctx.font) - 4;
+
       const labelWidth = text.width + textPaddingLeft * 2;
       const labelHeight = font + textPaddingTop * 2;
+
       let [x, y] = point.map((a) => a * this.scale);
+
       // 以point为中心创建label
       if (shape.type === 1 || shape.type === 2 || shape.type === 5) {
         x = x - (labelWidth / 2) * this.scale;
         y = y - (labelHeight / 2) * this.scale;
       }
+
       const toleft =
         this.IMAGE_ORIGIN_WIDTH - point[0] < labelWidth / this.scale;
       const toTop =
@@ -2481,9 +2642,11 @@ export default class CanvasSelect extends EventBus {
 
       this.ctx.fillRect(rectX, rectY, rectWidth, rectHeight);
 
+      // 计算字体大小，使其与矩形的大小匹配
+      const fontSize = (Math.min(rectWidth, rectHeight) / 4) * 3; // 字体大小与矩形最小边长成比例
+
       // 设置文本样式并考虑缩放
-      // const scaledFontSize = font * this.scale;  // 根据缩放因子调整字体大小
-      // this.ctx.font = `${this.labelFontSize * this.scale}px sans-serif`;  // 更新字体大小
+      this.ctx.font = `${fontSize}px ${labelFontFamily || "sans-serif"}`;
 
       this.ctx.fillStyle = textFillStyle || this.textFillStyle;
 
@@ -2496,11 +2659,11 @@ export default class CanvasSelect extends EventBus {
         textMetrics.fontBoundingBoxAscent + textMetrics.fontBoundingBoxDescent;
 
       // 设置文本的基线对齐方式为中间
-      this.ctx.textBaseline = "top"; // 设置基线为顶部，便于精确控制位置
+      this.ctx.textBaseline = "middle"; // 设置基线为中间，便于精确控制位置
 
       // 计算文本的横向和纵向居中位置
       const textX = rectX + (rectWidth - textWidth) / 2; // 横向居中
-      const textY = rectY + (rectHeight - textHeight) / 2; // 垂直居中，基于矩形的中间位置减去文本高度的一半
+      const textY = rectY + rectHeight / 2; // 垂直居中，基于矩形的中间位置减去文本高度的一半
 
       // 绘制居中的文本，考虑缩放
       this.ctx.fillText(newText, textX, textY, rectWidth);
@@ -2541,24 +2704,28 @@ export default class CanvasSelect extends EventBus {
           // 将修改后的像素数据重新放回画布
           this.ctx.putImageData(imageData, this.originX, this.originY);
         } else {
-          if (this.imagealpha === 1) {
-            this.ctx.drawImage(
-              this.image,
-              0,
-              0,
-              this.IMAGE_WIDTH,
-              this.IMAGE_HEIGHT
-            );
-          } else {
-            this.ctx.globalAlpha = this.imagealpha;
-            this.ctx.drawImage(
-              this.image,
-              0,
-              0,
-              this.IMAGE_WIDTH,
-              this.IMAGE_HEIGHT
-            );
-            this.ctx.globalAlpha = 1.0;
+          // console.log("this.imagesrc", this.image.src);
+          // console.log("this.image1", this.image);
+          if (!this.image.src.includes("undefined")) {
+            if (this.imagealpha === 1) {
+              this.ctx.drawImage(
+                this.image,
+                0,
+                0,
+                this.IMAGE_WIDTH,
+                this.IMAGE_HEIGHT
+              );
+            } else {
+              this.ctx.globalAlpha = this.imagealpha;
+              this.ctx.drawImage(
+                this.image,
+                0,
+                0,
+                this.IMAGE_WIDTH,
+                this.IMAGE_HEIGHT
+              );
+              this.ctx.globalAlpha = 1.0;
+            }
           }
         }
       }
@@ -3112,11 +3279,19 @@ export default class CanvasSelect extends EventBus {
   /**
    * 重新设置画布大小
    */
-  resize(width: number, height: number, alpha: number = 1) {
+  resize(
+    width: number,
+    height: number,
+    alpha: number = 1,
+    imageurl: string = ""
+  ) {
     this.canvas.width = width;
     this.canvas.height = height;
     this.canvas.style.width = String(width) + "px";
     this.canvas.style.height = String(height) + "px";
+    if (imageurl !== "" || this.imagesrc === undefined) {
+      this.imagesrc = imageurl;
+    }
     this.setImage(this.imagesrc, alpha);
     this.initSetting();
     this.update();

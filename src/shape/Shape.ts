@@ -11,6 +11,8 @@ export default class Shape {
   public label: string = "";
   /** 是否隐藏标签 */
   public hideLabel: boolean;
+  /** 是否隐藏标签 */
+  public truncated: number = 0;
   /** 坐标 */
   public coor: any[] = [];
   /** 边线颜色 */
