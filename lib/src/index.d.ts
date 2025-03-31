@@ -119,8 +119,10 @@ export default class CanvasSelect extends EventBus {
     originX: number;
     /** 原点y */
     originY: number;
-    /** 缩放步长 */
+    /** 图片缩放步长 */
     scaleStep: number;
+    /** 标签名缩放步长 */
+    textscaleStep: number;
     /** 滚动缩放 */
     scrollZoom: boolean;
     private timer;
@@ -172,6 +174,7 @@ export default class CanvasSelect extends EventBus {
     }[];
     isMagicToolActive: boolean;
     magicPoints: MagicPoint[];
+    maxLinePointCount: number;
     /**
      * @param el Valid CSS selector string, or DOM
      * @param src image src

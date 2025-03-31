@@ -53,6 +53,13 @@
       .container {
         width: 100%;
         height: 100%;
+        z-index: 1;
+      }
+
+      #image-canvas {
+        width: 100%;
+        height: 100%;
+        z-index: -1;
       }
 
       /* 自定义圆形光标 */
@@ -119,13 +126,15 @@
             橡皮擦
           </button>
           <button onclick="nocolor()">透明色</button>
-          <button onclick="changeCanvas()">扩大画布</button>
+          <button onclick="changeCanvas()">改变画布</button>
           <button onclick="saveImage()">保存图片</button>
           <br />
           <button onclick="getAllMask()">分割一切</button>
           <button onclick="magicClick()">智能标注</button>
           <button onclick="transferMaskImage()">生成Mask图</button>
-          <button onclick="instance.resize(1000, 404, 0.5)">
+          <button
+            onclick="instance.resize(1900, 1200, 0.5);instance_img.resize(1900, 1200, 0.5)"
+          >
             改变canvas尺寸
           </button>
           <br />
@@ -178,13 +187,25 @@
       const customCursor = document.getElementById("customCursor");
       const output = document.getElementById("output");
 
+      // const instance = new CanvasSelect(
+      //   ".container",
+      //   "https://th.bing.com/th/id/R.0340e3e6aa980cb6c1207bc5d3c939ad?rik=HWTAbCxQ6h7TJA&riu=http%3a%2f%2fpic4.bbzhi.com%2fjingxuanbizhi%2fxiangrikui%2fxiangrikui_378683_1.jpg&ehk=7QHkfPflUkJosR4pLUkTso5t1WEv2W6lvw5dsFJqI0o%3d&risl=&pid=ImgRaw&r=0"
+      // );
+      // const instance_img = new CanvasSelect(
+      //   ".image",
+      //   "https://th.bing.com/th/id/R.0340e3e6aa980cb6c1207bc5d3c939ad?rik=HWTAbCxQ6h7TJA&riu=http%3a%2f%2fpic4.bbzhi.com%2fjingxuanbizhi%2fxiangrikui%2fxiangrikui_378683_1.jpg&ehk=7QHkfPflUkJosR4pLUkTso5t1WEv2W6lvw5dsFJqI0o%3d&risl=&pid=ImgRaw&r=0"
+      // );
       const instance = new CanvasSelect(
         ".container",
-        "https://th.bing.com/th/id/R.0340e3e6aa980cb6c1207bc5d3c939ad?rik=HWTAbCxQ6h7TJA&riu=http%3a%2f%2fpic4.bbzhi.com%2fjingxuanbizhi%2fxiangrikui%2fxiangrikui_378683_1.jpg&ehk=7QHkfPflUkJosR4pLUkTso5t1WEv2W6lvw5dsFJqI0o%3d&risl=&pid=ImgRaw&r=0"
+        "../3c885d43fbf13171172f56647e9499d.jpg"
+        // "../0cc1554b54b74db09679efecf9da1bbe.jpg"
+        // "../2024_06_08_10_42_04.bmp"
       );
       const instance_img = new CanvasSelect(
         ".image",
-        "https://th.bing.com/th/id/R.0340e3e6aa980cb6c1207bc5d3c939ad?rik=HWTAbCxQ6h7TJA&riu=http%3a%2f%2fpic4.bbzhi.com%2fjingxuanbizhi%2fxiangrikui%2fxiangrikui_378683_1.jpg&ehk=7QHkfPflUkJosR4pLUkTso5t1WEv2W6lvw5dsFJqI0o%3d&risl=&pid=ImgRaw&r=0"
+        "../3c885d43fbf13171172f56647e9499d.jpg"
+        // "../0cc1554b54b74db09679efecf9da1bbe.jpg"
+        // "../2024_06_08_10_42_04.bmp"
       );
       // instance.ctrlRadius = navigator.userAgent.includes('Mobile') ? 6 : 3;
       // window.c = instance;
@@ -236,23 +257,14 @@
       }
       let option = [
         {
-          label: "矩形231312",
+          label: "115515184848484",
           // coor: [[557, 311], [1047, 759]],
           coor: [
             [56, 87],
-            [294, 313]
+            [94, 231]
           ],
           type: 1
         },
-        {
-          label: "3123123矩形",
-          coor: [
-            [457, 511],
-            [247, 259]
-          ],
-          // coor: [[356, 387], [594, 213]],
-          type: 1
-        }
         // {
         //   coor: [[584, 987], [584, 989], [586, 992], [589, 993], [590, 995], [592, 997], [595, 997], [597, 998]],
         //   type: 7
@@ -280,11 +292,19 @@
         //   //   }
         //   // ]
         // },
-        // {
-        //   label: "",
-        //   coor: [[135, 191], [129, 119], [146, 146], [174, 165], [214, 162], [196, 137], [161, 188]],
-        //   type: 2
-        // },
+        {
+          label: "多边形151851541",
+          coor: [
+            [610, 483],
+            [341, 450],
+            [419, 279],
+            [474, 185],
+            [639, 118],
+            [708, 268],
+            [773, 419]
+          ],
+          type: 2
+        }
         // {
         //   label: "点",
         //   coor: [85, 105],

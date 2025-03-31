@@ -81,7 +81,7 @@ export default class CanvasSelect extends EventBus {
   /** 标签字型 */
   labelFontFamily = "sans-serif";
   /** 标签字号 */
-  labelFontSize = 12;
+  labelFontSize = 18;
   /** 标签文字颜色 */
   textFillStyle = "#FFFFFF";
   /** 标签字符最大长度，超出使用省略号 */
@@ -103,7 +103,7 @@ export default class CanvasSelect extends EventBus {
   dataset: AllShape[] = [];
 
   /** 撤销数组最多保存记录条数 */
-  MAX_LENGTH = 6;
+  MAX_LENGTH = 10;
 
   // 保存一次完成的修改后的记录(触发按钮事件或鼠标抬起)
   doneList: AllShape[][] = [];
@@ -143,8 +143,10 @@ export default class CanvasSelect extends EventBus {
   originX = 0;
   /** 原点y */
   originY = 0;
-  /** 缩放步长 */
+  /** 图片缩放步长 */
   scaleStep = 0;
+  /** 标签名缩放步长 */
+  textscaleStep = 0;
   /** 滚动缩放 */
   scrollZoom = true;
 
@@ -209,6 +211,8 @@ export default class CanvasSelect extends EventBus {
   isMagicToolActive = false;
 
   magicPoints: MagicPoint[] = [];
+
+  maxLinePointCount = 2;
 
   /**
    * @param el Valid CSS selector string, or DOM
@@ -315,7 +319,20 @@ export default class CanvasSelect extends EventBus {
     if (this.lock || !this.scrollZoom) return;
     const { mouseX, mouseY } = this.mergeEvent(e);
     this.mouse = [mouseX, mouseY];
-    this.setScale(e.deltaY < 0, true);
+
+    if (
+      (e.deltaY > 0 && this.imageMin < this.MIN_LENGTH) ||
+      (e.deltaY < 0 && this.IMAGE_WIDTH > this.imageOriginMax * 10)
+    ) {
+      return;
+    } else {
+      if (e.deltaY < 0) {
+        this.textscaleStep++;
+      } else {
+        this.textscaleStep--;
+      }
+      this.setScale(e.deltaY < 0, true);
+    }
   }
 
   private handleMouseDown(e: MouseEvent | TouchEvent) {
@@ -856,6 +873,16 @@ export default class CanvasSelect extends EventBus {
             this.activeShape.boundingRect = resultRect;
             this.emit("add", this.activeShape);
           }
+        } else if (this.createType === Shape.Line) {
+          if (this.activeShape.coor.length === this.maxLinePointCount) {
+            const canLine =
+              this.activeShape.type === Shape.Line &&
+              this.activeShape.coor.length > 1;
+            if (canLine) {
+              this.emit("add", this.activeShape);
+              this.activeShape.creating = false;
+            }
+          }
         }
         this.update();
       }
@@ -867,6 +894,7 @@ export default class CanvasSelect extends EventBus {
         "strokeStyle",
         "textFillStyle",
         "uuid",
+        "remark",
         "length"
       ];
       // console.log(deepEqual(this.olddataset, this.dataset, condition));
@@ -1004,6 +1032,8 @@ export default class CanvasSelect extends EventBus {
     this.image.crossOrigin = "Anonymous";
     this.image.src = url;
     this.imagealpha = alpha;
+    this.scaleStep = 0;
+    this.textscaleStep = 0;
   }
 
   // 异步处理 Mask 形状的创建
@@ -2585,92 +2615,81 @@ export default class CanvasSelect extends EventBus {
     const {
       label = "",
       labelFillStyle = "",
-      labelFontSize = 12,
       labelFontFamily = "",
       textFillStyle = "",
       hideLabel,
       labelUp,
-      lineWidth
+      lineWidth,
+      coor
     } = shape;
-    const isHideLabel =
-      typeof hideLabel === "boolean" ? hideLabel : this.hideLabel;
-    const isLabelUp = typeof labelUp === "boolean" ? labelUp : this.labelUp;
+
+    if (
+      !label.length ||
+      (typeof hideLabel === "boolean" ? hideLabel : this.hideLabel)
+    )
+      return;
+
+    const textPadding = { left: 4, top: 4 };
+    const newText =
+      label.length <= this.labelMaxLen
+        ? label
+        : `${label.slice(0, this.labelMaxLen)}...`;
+
+    // 设置字体缩放比例
+    const scaleFactor =
+      (this.textscaleStep >= 0 ? 1.1 : 0.9) ** Math.abs(this.textscaleStep);
+    this.ctx.font = `${this.labelFontSize * scaleFactor}px ${
+      labelFontFamily || "sans-serif"
+    }`;
+
+    const textMetrics = this.ctx.measureText(newText);
+    const labelWidth = textMetrics.width + textPadding.left * 2;
+    const labelHeight = parseInt(this.ctx.font) - 4 + textPadding.top * 2;
+
     const currLineWidth = lineWidth || this.lineWidth;
+    const isLabelUp = typeof labelUp === "boolean" ? labelUp : this.labelUp;
 
-    if (label.length && !isHideLabel) {
-      // 设置字体大小为矩形高度的一个比例
-      const textPaddingLeft = 4;
-      const textPaddingTop = 4;
-      const newText =
-        label.length < this.labelMaxLen + 1
-          ? label
-          : `${label.slice(0, this.labelMaxLen)}...`;
-      const text = this.ctx.measureText(newText);
-      const font = parseInt(this.ctx.font) - 4;
+    const toLeft = this.IMAGE_ORIGIN_WIDTH - point[0] < labelWidth / this.scale;
+    const toTop =
+      this.IMAGE_ORIGIN_HEIGHT - point[1] < labelHeight / this.scale;
+    const toTop2 = point[1] > labelHeight / this.scale;
+    const isUp = isLabelUp ? toTop2 : toTop;
 
-      const labelWidth = text.width + textPaddingLeft * 2;
-      const labelHeight = font + textPaddingTop * 2;
+    this.ctx.save();
+    this.ctx.fillStyle = labelFillStyle || this.labelFillStyle;
 
-      let [x, y] = point.map((a) => a * this.scale);
+    let [x, y] = point.map((a) => a * this.scale);
 
-      // 以point为中心创建label
-      if (shape.type === 1 || shape.type === 2 || shape.type === 5) {
-        x = x - (labelWidth / 2) * this.scale;
-        y = y - (labelHeight / 2) * this.scale;
-      }
-
-      const toleft =
-        this.IMAGE_ORIGIN_WIDTH - point[0] < labelWidth / this.scale;
-      const toTop =
-        this.IMAGE_ORIGIN_HEIGHT - point[1] < labelHeight / this.scale;
-      const toTop2 = point[1] > labelHeight / this.scale;
-      const isup = isLabelUp ? toTop2 : toTop;
-      this.ctx.save();
-
-      // 设置矩形样式
-      this.ctx.fillStyle = labelFillStyle || this.labelFillStyle;
-
-      // 绘制矩形，考虑缩放因子
-      const rectX = toleft
-        ? x - text.width - textPaddingLeft - currLineWidth / 2
-        : x + currLineWidth / 2;
-      const rectY = isup
-        ? y - labelHeight - currLineWidth / 2
-        : y + currLineWidth / 2;
-      const rectWidth = labelWidth * this.scale;
-      const rectHeight = labelHeight * this.scale;
-
-      this.ctx.fillRect(rectX, rectY, rectWidth, rectHeight);
-
-      // 计算字体大小，使其与矩形的大小匹配
-      const fontSize = (Math.min(rectWidth, rectHeight) / 4) * 3; // 字体大小与矩形最小边长成比例
-
-      // 设置文本样式并考虑缩放
-      this.ctx.font = `${fontSize}px ${labelFontFamily || "sans-serif"}`;
-
-      this.ctx.fillStyle = textFillStyle || this.textFillStyle;
-
-      // 获取文本的实际宽度，用于居中计算
-      const textWidth = this.ctx.measureText(newText).width;
-
-      // 获取文本的实际高度，用于垂直居中计算
-      const textMetrics = this.ctx.measureText(newText);
-      const textHeight =
-        textMetrics.fontBoundingBoxAscent + textMetrics.fontBoundingBoxDescent;
-
-      // 设置文本的基线对齐方式为中间
-      this.ctx.textBaseline = "middle"; // 设置基线为中间，便于精确控制位置
-
-      // 计算文本的横向和纵向居中位置
-      const textX = rectX + (rectWidth - textWidth) / 2; // 横向居中
-      const textY = rectY + rectHeight / 2; // 垂直居中，基于矩形的中间位置减去文本高度的一半
-
-      // 绘制居中的文本，考虑缩放
-      this.ctx.fillText(newText, textX, textY, rectWidth);
-
-      // 恢复上下文
-      this.ctx.restore();
+    // 以 point 为中心创建 label
+    if ([1, 2, 5].includes(shape.type)) {
+      x -= labelWidth / 2;
+      y -= labelHeight / 2;
     }
+
+    // 计算矩形位置
+    const rectX = toLeft
+      ? x - textMetrics.width - textPadding.left + currLineWidth / 2
+      : x + currLineWidth / 2;
+    const rectY = isUp
+      ? y - labelHeight - currLineWidth / 2
+      : y + currLineWidth / 2;
+
+    // 计算缩放后的矩形大小
+    const rectWidth = labelWidth;
+    const rectHeight = labelHeight;
+    this.ctx.fillRect(rectX, rectY, rectWidth, rectHeight);
+
+    // 设置文本样式
+    this.ctx.fillStyle = textFillStyle || this.textFillStyle;
+    this.ctx.textBaseline = "middle";
+
+    // 计算文本绘制位置
+    const textX = rectX + (rectWidth - textMetrics.width) / 2;
+    const textY = rectY + rectHeight / 2;
+
+    // 绘制文本
+    this.ctx.fillText(newText, textX, textY, rectWidth);
+    this.ctx.restore();
   }
 
   /**
@@ -3170,10 +3189,10 @@ export default class CanvasSelect extends EventBus {
     const abs = Math.abs(this.scaleStep);
     const width = this.IMAGE_WIDTH;
     this.IMAGE_WIDTH = Math.round(
-      this.IMAGE_ORIGIN_WIDTH * (this.scaleStep >= 0 ? 1.05 : 0.95) ** abs
+      this.IMAGE_ORIGIN_WIDTH * (this.scaleStep >= 0 ? 1.1 : 0.9) ** abs
     );
     this.IMAGE_HEIGHT = Math.round(
-      this.IMAGE_ORIGIN_HEIGHT * (this.scaleStep >= 0 ? 1.05 : 0.95) ** abs
+      this.IMAGE_ORIGIN_HEIGHT * (this.scaleStep >= 0 ? 1.1 : 0.9) ** abs
     );
     if (byMouse) {
       this.originX = x - realToLeft * this.scale;
@@ -3205,6 +3224,7 @@ export default class CanvasSelect extends EventBus {
     }
     this.originX = (this.WIDTH - this.IMAGE_WIDTH) / 2;
     this.originY = (this.HEIGHT - this.IMAGE_HEIGHT) / 2;
+    this.textscaleStep = 0;
     this.emit("fitZoom");
     this.update();
   }

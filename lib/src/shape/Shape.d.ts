@@ -7,6 +7,8 @@ export default class Shape {
     tagId: string;
     /** 标签名称 */
     label: string;
+    /** 标注Id(数据库中获得) */
+    labelId: string;
     /** 是否隐藏标签 */
     hideLabel: boolean;
     /** 是否隐藏标签 */
@@ -41,6 +43,8 @@ export default class Shape {
     hiddening: boolean;
     /** 当前是否处于锁定状态 */
     locking: boolean;
+    /** 备注 */
+    remark: string;
     /** 索引 */
     index: number;
     /** 唯一标识 */
