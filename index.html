@@ -168,13 +168,13 @@
             <span>宽度：</span>
             <input
               type="range"
-              min="1"
-              max="15"
-              value="1"
+              min="10"
+              max="50"
+              value="5"
               id="widthRange"
               onchange="handleWidthChange(this)"
             />
-            <span id="widthValue">1</span>
+            <span id="widthValue">10</span>
           </div>
         </div>
       </div>
@@ -197,13 +197,15 @@
       // );
       const instance = new CanvasSelect(
         ".container",
-        "../3c885d43fbf13171172f56647e9499d.jpg"
+        // "../3c885d43fbf13171172f56647e9499d.jpg"
+        "pexels-luke-sinclair-2150962445-31579073.jpg"
         // "../0cc1554b54b74db09679efecf9da1bbe.jpg"
         // "../2024_06_08_10_42_04.bmp"
       );
       const instance_img = new CanvasSelect(
         ".image",
-        "../3c885d43fbf13171172f56647e9499d.jpg"
+        // "../3c885d43fbf13171172f56647e9499d.jpg"
+        "pexels-luke-sinclair-2150962445-31579073.jpg"
         // "../0cc1554b54b74db09679efecf9da1bbe.jpg"
         // "../2024_06_08_10_42_04.bmp"
       );
@@ -247,24 +249,27 @@
 
       // 处理宽度选择器的 change 事件
       function handleWidthChange(input) {
+        console.log("instance.scale", instance.scale);
         if (typeof input === "number") {
-          instance.brushlineWidth = input;
+          instance.brushlineWidth = Math.floor(input / instance.scale);
         } else {
-          instance.brushlineWidth = parseInt(input.value);
+          instance.brushlineWidth = Math.floor(
+            parseInt(input.value) / instance.scale
+          );
         }
         document.getElementById("widthValue").textContent = input.value;
         setCursorRadius(instance.brushlineWidth);
       }
       let option = [
-        {
-          label: "115515184848484",
-          // coor: [[557, 311], [1047, 759]],
-          coor: [
-            [56, 87],
-            [94, 231]
-          ],
-          type: 1
-        },
+        // {
+        //   label: "115515184848484",
+        //   // coor: [[557, 311], [1047, 759]],
+        //   coor: [
+        //     [56, 87],
+        //     [94, 231]
+        //   ],
+        //   type: 1
+        // },
         // {
         //   coor: [[584, 987], [584, 989], [586, 992], [589, 993], [590, 995], [592, 997], [595, 997], [597, 998]],
         //   type: 7
@@ -292,19 +297,19 @@
         //   //   }
         //   // ]
         // },
-        {
-          label: "多边形151851541",
-          coor: [
-            [610, 483],
-            [341, 450],
-            [419, 279],
-            [474, 185],
-            [639, 118],
-            [708, 268],
-            [773, 419]
-          ],
-          type: 2
-        }
+        // {
+        //   label: "多边形151851541",
+        //   coor: [
+        //     [610, 483],
+        //     [341, 450],
+        //     [419, 279],
+        //     [474, 185],
+        //     [639, 118],
+        //     [708, 268],
+        //     [773, 419]
+        //   ],
+        //   type: 2
+        // }
         // {
         //   label: "点",
         //   coor: [85, 105],

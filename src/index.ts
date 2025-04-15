@@ -57,15 +57,15 @@ export default class CanvasSelect extends EventBus {
   /** 缩放图像的最小边长 */
   MIN_LENGTH = 140;
   /** 边线颜色 */
-  strokeStyle = "#0f0";
+  strokeStyle = "#000";
   /** 填充颜色 */
   fillStyle = "rgba(0, 0, 255, 0.1)";
   /** 边线宽度 */
   lineWidth = 2;
   /** 当前选中的标注边线颜色 */
-  activeStrokeStyle = "rgba(0, 0, 255, 1)";
+  activeStrokeStyle = "#000";
   /** 当前选中的标注填充颜色 */
-  activeFillStyle = "rgba(0, 0, 255, 1)";
+  activeFillStyle = "#000";
   /** 控制点边线颜色 */
   ctrlStrokeStyle = "#000";
   /** 控制点填充颜色 */
@@ -369,6 +369,8 @@ export default class CanvasSelect extends EventBus {
           this.ctrlIndex === 0
         ) {
           this.handleDblclick(e);
+        } else {
+          this.update();
         }
         this.remmber = [[offsetX - x0, offsetY - y0]];
       } else if (this.isInBackground(e)) {
@@ -496,6 +498,7 @@ export default class CanvasSelect extends EventBus {
               //   ).resultRect;
               // }
               this.emit("select", hitShape);
+              this.update();
               return; // 刷子、橡皮檫和钢笔轨迹不可被拖拽
             }
             // if(hitShape.type === Shape.Mask){
@@ -527,6 +530,11 @@ export default class CanvasSelect extends EventBus {
             this.emit("select", null);
           }
         }
+        this.update();
+      } else {
+        this.activeShape.active = false;
+        this.dataset.sort((a, b) => a.index - b.index);
+        this.emit("select", null);
         this.update();
       }
     } else if (
@@ -756,6 +764,7 @@ export default class CanvasSelect extends EventBus {
   }
 
   private handleMouseUp(e: MouseEvent | TouchEvent) {
+    console.log("handleMouseUp");
     e.stopPropagation();
     this.evt = e;
     if (this.lock) return;
@@ -983,7 +992,12 @@ export default class CanvasSelect extends EventBus {
   initSetting() {
     const dpr = window.devicePixelRatio || 1;
     this.canvas.style.userSelect = "none";
-    this.ctx = this.ctx || this.canvas.getContext("2d", { alpha: this.alpha });
+    this.ctx =
+      this.ctx ||
+      this.canvas.getContext("2d", {
+        alpha: this.alpha,
+        willReadFrequently: true
+      });
     this.WIDTH = Math.round(this.canvas.clientWidth);
     this.HEIGHT = Math.round(this.canvas.clientHeight);
     this.canvas.width = this.WIDTH * dpr;
@@ -1000,12 +1014,14 @@ export default class CanvasSelect extends EventBus {
 
   /** 初始化事件 */
   initEvents() {
+    if (!this.canvas) return;
     this.image.addEventListener("load", this.handleLoad);
     this.canvas.addEventListener("touchstart", this.handleMouseDown);
     this.canvas.addEventListener("touchmove", this.handleMouseMove);
     this.canvas.addEventListener("touchend", this.handleMouseUp);
     this.canvas.addEventListener("contextmenu", this.handleContextmenu);
-    this.canvas.addEventListener("mousewheel", this.handleMousewheel);
+    this.canvas.addEventListener("mousewheel", this.handleMousewheel); // 火狐浏览器不支持mousewheel事件
+    this.canvas.removeEventListener("wheel", this.handleMousewheel); // 解决火狐浏览器不支持mousewheel事件的问题
     this.canvas.addEventListener("mousedown", this.handleMouseDown);
     this.canvas.addEventListener("mousemove", this.handleMouseMove);
     this.canvas.addEventListener("mouseup", this.handleMouseUp);
@@ -1296,7 +1312,9 @@ export default class CanvasSelect extends EventBus {
       } else if (
         shape.type === Shape.Brush ||
         shape.type === Shape.Pencil ||
-        shape.type === Shape.Polygon
+        shape.type === Shape.Polygon ||
+        shape.type === Shape.Line ||
+        shape.type === Shape.Circle
       ) {
         mouseType = "pointer";
       } else {
@@ -2523,6 +2541,7 @@ export default class CanvasSelect extends EventBus {
       shape.coor.splice(this.clickIndex, 1);
       this.update();
       this.manageDoneList(deepClone(this.dataset));
+      this.clickIndex = -1;
     }
   }
 
@@ -3252,6 +3271,7 @@ export default class CanvasSelect extends EventBus {
    */
   undo() {
     if (this.doneList.length > 1) {
+      this.clickIndex = -1; // 重置点击索引
       const lastDoneItem = this.doneList[this.doneList.length - 1];
       this.undoList.push(lastDoneItem);
       this.doneList.pop();
@@ -3265,6 +3285,7 @@ export default class CanvasSelect extends EventBus {
    */
   redo() {
     if (this.undoList.length > 0) {
+      this.clickIndex = -1; // 重置点击索引
       const lastDoneItem = this.undoList[this.undoList.length - 1];
       this.manageDoneList(lastDoneItem);
       this.undoList.pop();
@@ -3277,11 +3298,13 @@ export default class CanvasSelect extends EventBus {
    * 销毁
    */
   destroy() {
+    if (!this.canvas) return;
     this.image.removeEventListener("load", this.handleLoad);
     this.canvas.removeEventListener("contextmenu", this.handleContextmenu);
     this.canvas.removeEventListener("mousewheel", this.handleMousewheel);
+    this.canvas.removeEventListener("wheel", this.handleMousewheel);
     this.canvas.removeEventListener("mousedown", this.handleMouseDown);
-    this.canvas.removeEventListener("touchend", this.handleMouseDown);
+    this.canvas.removeEventListener("touchstart", this.handleMouseDown);
     this.canvas.removeEventListener("mousemove", this.handleMouseMove);
     this.canvas.removeEventListener("touchmove", this.handleMouseMove);
     this.canvas.removeEventListener("mouseup", this.handleMouseUp);
