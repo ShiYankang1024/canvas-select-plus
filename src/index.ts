@@ -1147,87 +1147,91 @@ export default class CanvasSelect extends EventBus {
   setData(
     data: AllShape[],
     needCreate: boolean = true,
-    toMask: boolean = false
-  ) {
-    setTimeout(async () => {
-      if (needCreate) {
-        const initdata: AllShape[] = [];
-        const itemIndexMap = new Map<AllShape, number>();
+    toMask: boolean = false,
+    initSize: boolean = false
+  ): Promise<void> {
+    return new Promise((resolve) => {
+      setTimeout(async () => {
+        if (needCreate) {
+          const initdata: AllShape[] = [];
+          const itemIndexMap = new Map<AllShape, number>();
 
-        // 创建索引映射
-        data.forEach((item, index) => {
-          itemIndexMap.set(item, index);
-        });
-        for (const item of data) {
-          if (Object.prototype.toString.call(item).includes("Object")) {
-            let shape;
-            const index = itemIndexMap.get(item)!; // 使用映射获取索引
+          data.forEach((item, index) => {
+            itemIndexMap.set(item, index);
+          });
 
-            switch (item.type) {
-              case Shape.Rect:
-                shape = new Rect(item, index); // 注意：这里使用indexOf可能会导致性能问题，如果数组很大或者item没有稳定的引用
-                break;
-              case Shape.Polygon:
-                shape = new Polygon(item, index);
-                break;
-              case Shape.Dot:
-                shape = new Dot(item, index);
-                break;
-              case Shape.Line:
-                shape = new Line(item, index);
-                break;
-              case Shape.Circle:
-                shape = new Circle(item, index);
-                break;
-              case Shape.Grid:
-                shape = new Grid(item, index);
-                break;
-              case Shape.Brush:
-                shape = new Brush(item, index);
-                // shape.boundingRect = this.removeDuplicatePoints(
-                //   shape.coor,
-                //   true,
-                //   false
-                // ).resultRect;
-                break;
-              case Shape.Mask:
-                shape = await this.handleMaskShape(item, index); // 处理异步操作
-                break;
-              case Shape.Pencil:
-                shape = new Pencil(item, index);
-                break;
-              default:
-                console.warn("Invalid shape", item);
-                break;
+          for (const item of data) {
+            if (Object.prototype.toString.call(item).includes("Object")) {
+              let shape;
+              const index = itemIndexMap.get(item)!;
+
+              switch (item.type) {
+                case Shape.Rect:
+                  shape = new Rect(item, index);
+                  break;
+                case Shape.Polygon:
+                  shape = new Polygon(item, index);
+                  break;
+                case Shape.Dot:
+                  shape = new Dot(item, index);
+                  break;
+                case Shape.Line:
+                  shape = new Line(item, index);
+                  break;
+                case Shape.Circle:
+                  shape = new Circle(item, index);
+                  break;
+                case Shape.Grid:
+                  shape = new Grid(item, index);
+                  break;
+                case Shape.Brush:
+                  shape = new Brush(item, index);
+                  break;
+                case Shape.Mask:
+                  shape = await this.handleMaskShape(item, index);
+                  break;
+                case Shape.Pencil:
+                  shape = new Pencil(item, index);
+                  break;
+                default:
+                  console.warn("Invalid shape", item);
+                  break;
+              }
+
+              if (
+                [
+                  Shape.Rect,
+                  Shape.Polygon,
+                  Shape.Dot,
+                  Shape.Line,
+                  Shape.Circle,
+                  Shape.Grid,
+                  Shape.Brush,
+                  Shape.Mask,
+                  Shape.Pencil
+                ].includes(item.type)
+              ) {
+                initdata.push(shape);
+              }
+            } else {
+              console.warn("Shape must be an enumerable Object.", item);
             }
-            if (
-              [
-                Shape.Rect,
-                Shape.Polygon,
-                Shape.Dot,
-                Shape.Line,
-                Shape.Circle,
-                Shape.Grid,
-                Shape.Brush,
-                Shape.Mask,
-                Shape.Pencil
-              ].includes(item.type)
-            ) {
-              initdata.push(shape);
-            }
-          } else {
-            console.warn("Shape must be an enumerable Object.", item);
           }
+
+          this.dataset = initdata;
+        } else {
+          this.dataset = data;
         }
-        this.dataset = initdata;
-      } else {
-        this.dataset = data;
-      }
-      this.update(toMask);
-      if (this.doneList.length === 0 && this.dataset !== undefined) {
-        this.manageDoneList(deepClone(this.dataset));
-      }
-    }, 0); // 延迟执行，确保异步操作在事件循环的下一个tick中执行
+
+        this.update(toMask, initSize);
+
+        if (this.doneList.length === 0 && this.dataset !== undefined) {
+          this.manageDoneList(deepClone(this.dataset));
+        }
+
+        resolve(); // ✅ 完成后 resolve promise
+      }, 0); // 使用 setTimeout 模拟 nextTick，防止阻塞主线程
+    });
   }
 
   /**
@@ -2102,14 +2106,14 @@ export default class CanvasSelect extends EventBus {
 
       this.ctx.stroke();
 
-      if (active && this.activeShape.boundingRect.length > 0) {
-        const [x, y, w, h] = this.activeShape.boundingRect;
-        this.ctx.lineWidth = 1;
-        this.ctx.strokeStyle = this.activeStrokeStyle;
-        this.ctx.beginPath();
-        this.ctx.strokeRect(x, y, w, h);
-        this.ctx.stroke();
-      }
+      // if (active && this.activeShape.boundingRect.length > 0) {
+      //   const [x, y, w, h] = this.activeShape.boundingRect;
+      //   this.ctx.lineWidth = 1;
+      //   this.ctx.strokeStyle = this.activeStrokeStyle;
+      //   this.ctx.beginPath();
+      //   this.ctx.strokeRect(x, y, w, h);
+      //   this.ctx.stroke();
+      // }
     }
     this.ctx.restore();
   }
@@ -2605,12 +2609,12 @@ export default class CanvasSelect extends EventBus {
         }
       }
 
-      if (active && this.activeShape.boundingRect.length > 0) {
-        const [x, y, w, h] = this.activeShape.boundingRect;
-        this.ctx.lineWidth = 1;
-        this.ctx.strokeStyle = this.activeStrokeStyle;
-        this.ctx.strokeRect(x, y, w, h);
-      }
+      // if (active && this.activeShape.boundingRect.length > 0) {
+      //   const [x, y, w, h] = this.activeShape.boundingRect;
+      //   this.ctx.lineWidth = 1;
+      //   this.ctx.strokeStyle = this.activeStrokeStyle;
+      //   this.ctx.strokeRect(x, y, w, h);
+      // }
 
       // 绘制路径
       this.ctx.stroke();
@@ -2714,8 +2718,11 @@ export default class CanvasSelect extends EventBus {
   /**
    * 更新画布
    */
-  update(toMask: boolean = false) {
+  update(toMask: boolean = false, initSize: boolean = false) {
     window.cancelAnimationFrame(this.timer);
+    if (initSize) {
+      this.initZoom();
+    }
     this.timer = window.requestAnimationFrame(() => {
       this.ctx.save();
       this.ctx.clearRect(0, 0, this.WIDTH, this.HEIGHT);
@@ -3246,6 +3253,19 @@ export default class CanvasSelect extends EventBus {
     this.textscaleStep = 0;
     this.emit("fitZoom");
     this.update();
+  }
+
+  /**
+   * 恢复为原始图片尺寸
+   */
+  initZoom() {
+    // this.calcStep();
+    this.IMAGE_WIDTH = this.IMAGE_ORIGIN_WIDTH;
+    this.IMAGE_HEIGHT = this.IMAGE_ORIGIN_HEIGHT;
+    this.originX = (this.WIDTH - this.IMAGE_WIDTH) / 2;
+    this.originY = (this.HEIGHT - this.IMAGE_HEIGHT) / 2;
+    this.textscaleStep = 0;
+    // this.update();
   }
 
   /**

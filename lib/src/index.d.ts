@@ -215,7 +215,7 @@ export default class CanvasSelect extends EventBus {
      * @param data Array
      * @param needCreate Boolean 是否需要创建(当传options时需要，当撤销重做操作传dataset时不需要)
      */
-    setData(data: AllShape[], needCreate?: boolean, toMask?: boolean): void;
+    setData(data: AllShape[], needCreate?: boolean, toMask?: boolean, initSize?: boolean): Promise<void>;
     /**
      * 判断是否在标注实例上
      * @param mousePoint 点击位置
@@ -416,7 +416,7 @@ export default class CanvasSelect extends EventBus {
     /**
      * 更新画布
      */
-    update(toMask?: boolean): void;
+    update(toMask?: boolean, initSize?: boolean): void;
     /**
      * 隐藏选中的图形
      */
@@ -462,6 +462,10 @@ export default class CanvasSelect extends EventBus {
      * 适配背景图
      */
     fitZoom(): void;
+    /**
+     * 恢复为原始图片尺寸
+     */
+    initZoom(): void;
     /**
      * 设置专注模式
      * @param type {boolean}

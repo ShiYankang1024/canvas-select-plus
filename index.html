@@ -113,6 +113,7 @@
           <button onclick="zoom(true)">放大</button>
           <button onclick="zoom(false)">缩小</button>
           <button onclick="fitting()">适配</button>
+          <button onclick="initZoom()">恢复原图大小</button>
           <button onclick="focusMode()">专注模式</button>
           <button onclick="hideShape()">隐藏</button>
           <button onclick="showShape()">显示</button>
@@ -198,15 +199,15 @@
       const instance = new CanvasSelect(
         ".container",
         // "../3c885d43fbf13171172f56647e9499d.jpg"
-        "pexels-luke-sinclair-2150962445-31579073.jpg"
-        // "../0cc1554b54b74db09679efecf9da1bbe.jpg"
+        // "pexels-luke-sinclair-2150962445-31579073.jpg"
+        "../0cc1554b54b74db09679efecf9da1bbe.jpg"
         // "../2024_06_08_10_42_04.bmp"
       );
       const instance_img = new CanvasSelect(
         ".image",
         // "../3c885d43fbf13171172f56647e9499d.jpg"
-        "pexels-luke-sinclair-2150962445-31579073.jpg"
-        // "../0cc1554b54b74db09679efecf9da1bbe.jpg"
+        // "pexels-luke-sinclair-2150962445-31579073.jpg"
+        "../0cc1554b54b74db09679efecf9da1bbe.jpg"
         // "../2024_06_08_10_42_04.bmp"
       );
       // instance.ctrlRadius = navigator.userAgent.includes('Mobile') ? 6 : 3;
@@ -260,43 +261,59 @@
         document.getElementById("widthValue").textContent = input.value;
         setCursorRadius(instance.brushlineWidth);
       }
+
       let option = [
-        // {
-        //   label: "115515184848484",
-        //   // coor: [[557, 311], [1047, 759]],
-        //   coor: [
-        //     [56, 87],
-        //     [94, 231]
-        //   ],
-        //   type: 1
-        // },
+        {
+          label: "115515184848484",
+          // coor: [[557, 311], [1047, 759]],
+          coor: [
+            [56, 87],
+            [94, 120]
+          ],
+          type: 1
+        },
         // {
         //   coor: [[584, 987], [584, 989], [586, 992], [589, 993], [590, 995], [592, 997], [595, 997], [597, 998]],
         //   type: 7
         // },
         // {
-        //   maskBase64: "iVBORw0KGgoAAAANSUhEUgAAAUAAAADwAQAAAABZVoDGAAAClElEQVR4nO2YMXLbMBBFP0WNrUIjM12KTKSZNCk14wOYRcocwkdI6S48Qo7ELi59BE6qNJlB4iK0Q3pTkJQAELtYO+qC3xALPf5dgAAkCkhKSkpKSkpKSkpKSkr639RY7YXAXSr91qR0vETxRgWWwLusnqIly91UQPkBcfAcQHX3is84Kieilo7jYWtcj6ZRcFShBVdRcD81jOy0pUFtZmTH3dTYRFKX43VZyJmzMTN1n+Uar+ggucby2JTBueJgc3LHnfipNer25Kn14CfpQ6vGP63ScSmmbmY9ihq1qcdVoQAbCTSzHvWEh7U/J0sV7/hR60iOYy2AX23wCQCyMOiGGVtjNe/STA/xYP0yxyf2kwty1LGOhRvmrTI1gPA8Zn5RD6uw41nIUZVaXaPRgg3Cg8k7r4NfFK6EZx2Q+lmHwOAiCIHDttOkrhX1AHjGMmvdkAcfAveFp6d0ohUPNk605EHjRDkPeqOpWPC1G5ZBaPi15cgwjutQh2qZLbTgBL8YbAN9QdDfW3hkwNmo1QfAF6Z/6084V6MJ3a0ZNevoj/qRA3vvQBK2QuVEwlZwdcaDteL2QVf2NLKHFLxtyI7a160AXttBDXBf7M5XEi14x40dZBUPFk5U8uDOifY8WDqR+hHiBGDtRN/527ezLfOvqa+1t9uJt/zPnuMbFxFR3Uk19tWhueNfmJGTOY7bQHK8M4fmKkwMjp114HeCY79EX06BBIbEggfH575zsVJOj6VVDPQeMQ96xykPegc0CxZmuPbvY45TBU0M/DZcbmOpffFgrXS4GBdaFQM3ORHd0/0UsxviVw70P7qf8dwZ9R3yZgr5wVDZAb0CBH7DWr8SaOL1AQDe4kZJHv9uSkpKSlLpL+l6Z7mdrIzxAAAAAElFTkSuQmCC",
+        //   maskBase64:
+        //     "iVBORw0KGgoAAAANSUhEUgAAAUAAAADwAQAAAABZVoDGAAAClElEQVR4nO2YMXLbMBBFP0WNrUIjM12KTKSZNCk14wOYRcocwkdI6S48Qo7ELi59BE6qNJlB4iK0Q3pTkJQAELtYO+qC3xALPf5dgAAkCkhKSkpKSkpKSkpKSkr639RY7YXAXSr91qR0vETxRgWWwLusnqIly91UQPkBcfAcQHX3is84Kieilo7jYWtcj6ZRcFShBVdRcD81jOy0pUFtZmTH3dTYRFKX43VZyJmzMTN1n+Uar+ggucby2JTBueJgc3LHnfipNer25Kn14CfpQ6vGP63ScSmmbmY9ihq1qcdVoQAbCTSzHvWEh7U/J0sV7/hR60iOYy2AX23wCQCyMOiGGVtjNe/STA/xYP0yxyf2kwty1LGOhRvmrTI1gPA8Zn5RD6uw41nIUZVaXaPRgg3Cg8k7r4NfFK6EZx2Q+lmHwOAiCIHDttOkrhX1AHjGMmvdkAcfAveFp6d0ohUPNk605EHjRDkPeqOpWPC1G5ZBaPi15cgwjutQh2qZLbTgBL8YbAN9QdDfW3hkwNmo1QfAF6Z/6084V6MJ3a0ZNevoj/qRA3vvQBK2QuVEwlZwdcaDteL2QVf2NLKHFLxtyI7a160AXttBDXBf7M5XEi14x40dZBUPFk5U8uDOifY8WDqR+hHiBGDtRN/527ezLfOvqa+1t9uJt/zPnuMbFxFR3Uk19tWhueNfmJGTOY7bQHK8M4fmKkwMjp114HeCY79EX06BBIbEggfH575zsVJOj6VVDPQeMQ96xykPegc0CxZmuPbvY45TBU0M/DZcbmOpffFgrXS4GBdaFQM3ORHd0/0UsxviVw70P7qf8dwZ9R3yZgr5wVDZAb0CBH7DWr8SaOL1AQDe4kZJHv9uSkpKSlLpL+l6Z7mdrIzxAAAAAElFTkSuQmCC",
         //   pixels: [],
         //   height: 0,
         //   weight: 0,
-        //   fillStyle: 'rgba(255, 0, 0, 0.8)',
+        //   fillStyle: "rgba(255, 0, 0, 0.8)",
         //   type: 8,
-        //   tagId: '',
-        //   label: '',
-        //   strokeStyle: 'rgba(255, 0, 0, 0.8)',
-        //   maskType: 'click',
+        //   tagId: "",
+        //   label: "",
+        //   strokeStyle: "rgba(255, 0, 0, 0.8)",
+        //   maskType: "click",
         //   maskToPolygon: false,
         //   // magicPoints: [
         //   //   {
         //   //     coor: [100, 100],
-        //   //     color: 'green',
+        //   //     color: "green"
         //   //   },
         //   //   {
         //   //     coor: [200, 200],
-        //   //     color: 'red',
+        //   //     color: "red"
         //   //   }
         //   // ]
-        // },
+        // }
+        // {
+        //   maskBase64: "",
+        //   pixels: [],
+        //   canvasData: null,
+        //   rle: rleArry,
+        //   height: 0,
+        //   weight: 0,
+        //   fillStyle: "",
+        //   type: 8,
+        //   tagId: "",
+        //   label: "",
+        //   strokeStyle: "",
+        //   maskType: "rle"
+        // }
         // {
         //   label: "多边形151851541",
         //   coor: [
@@ -321,12 +338,12 @@
         //   coor: [[170, 111], [190, 112], [193, 133]],
         //   type: 4
         // },
-        // {
-        //   label: "圆形",
-        //   coor: [369, 197],
-        //   radius: 38,
-        //   type: 5
-        // },
+        {
+          label: "圆形",
+          coor: [200, 100],
+          radius: 38,
+          type: 5
+        }
         // {
         //   label: "网格",
         //   coor: [[419, 40], [539, 101]],
@@ -352,7 +369,7 @@
         instance.activeStrokeStyle = "rgba(0, 0, 255, 0.6)";
         console.log("this.ctx.font", instance.ctx.font);
         instance.densityFactor = 15;
-        instance.setData(option);
+        instance.setData(option, true, false, true);
       });
 
       instance.on("scale", (info) => {
@@ -520,6 +537,11 @@
       function fitting() {
         instance.fitZoom();
         instance_img.fitZoom();
+      }
+
+      function initZoom() {
+        instance.initZoom();
+        instance_img.initZoom();
       }
 
       function focusMode() {
