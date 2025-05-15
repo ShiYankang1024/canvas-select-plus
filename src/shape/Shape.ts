@@ -11,9 +11,10 @@ export default class Shape {
   public label: string = "";
   /** 标注Id(数据库中获得) */
   public labelId: string = "";
+  public labelType = 0; // 0: 标注标签 1: 参考标签 2: 智能标签
   /** 是否隐藏标签 */
   public hideLabel: boolean;
-  /** 是否隐藏标签 */
+  /** 是否有重叠 */
   public truncated: number = 0;
   /** 坐标 */
   public coor: any[] = [];

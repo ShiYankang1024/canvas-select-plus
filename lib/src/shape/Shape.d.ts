@@ -9,9 +9,10 @@ export default class Shape {
     label: string;
     /** 标注Id(数据库中获得) */
     labelId: string;
+    labelType: number;
     /** 是否隐藏标签 */
     hideLabel: boolean;
-    /** 是否隐藏标签 */
+    /** 是否有重叠 */
     truncated: number;
     /** 坐标 */
     coor: any[];

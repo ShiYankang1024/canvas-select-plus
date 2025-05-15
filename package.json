@@ -1,6 +1,6 @@
 {
   "name": "canvas-select-plus",
-  "version": "2.25.0",
+  "version": "2.25.2",
   "description": "一款基于canvas的2D图像标注工具，在canvas-select的基础上，添加了清空、复制、撤销、重做、隐藏、显示和鼠标样式变化等功能，尚在开发和维护中...",
   "main": "lib/canvas-select.min.js",
   "types": "lib/src/index.d.ts",

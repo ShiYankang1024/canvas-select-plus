@@ -1,4 +1,4 @@
-import Shape from './Shape';
+import Shape from "./Shape";
 export default class Rect extends Shape {
     type: number;
     iscontour: boolean;

@@ -412,7 +412,7 @@ export default class CanvasSelect extends EventBus {
      * @param point 位置
      * @param label 文本
      */
-    drawLabel(point: Point, shape: AllShape): void;
+    drawLabel(point: Point, shape: AllShape, location?: String): void;
     /**
      * 更新画布
      */

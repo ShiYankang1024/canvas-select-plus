@@ -531,12 +531,13 @@ export default class CanvasSelect extends EventBus {
           }
         }
         this.update();
-      } else {
-        this.activeShape.active = false;
-        this.dataset.sort((a, b) => a.index - b.index);
-        this.emit("select", null);
-        this.update();
       }
+      // else {
+      //   this.activeShape.active = false;
+      //   this.dataset.sort((a, b) => a.index - b.index);
+      //   this.emit("select", null);
+      //   this.update();
+      // }
     } else if (
       (!this.isMobile && (e as MouseEvent).buttons === 2) ||
       (this.isMobile &&
@@ -818,21 +819,22 @@ export default class CanvasSelect extends EventBus {
             ];
             this.activeShape.creating = false;
             this.activeShape.truncated = 0;
-            for (let i = 0; i < this.dataset.length; i++) {
-              if (
-                this.dataset[i].type === Shape.Rect &&
-                this.dataset[i].index !== this.activeShape.index
-              ) {
-                if (
-                  this.dataset[i].coor[1][0] > this.activeShape.coor[0][0] &&
-                  this.dataset[i].coor[0][0] < this.activeShape.coor[1][0] &&
-                  this.dataset[i].coor[1][1] > this.activeShape.coor[0][1] &&
-                  this.dataset[i].coor[0][1] < this.activeShape.coor[1][1]
-                ) {
-                  this.activeShape.truncated = 1;
-                }
-              }
-            }
+            // 判断是否有重叠
+            // for (let i = 0; i < this.dataset.length; i++) {
+            //   if (
+            //     this.dataset[i].type === Shape.Rect &&
+            //     this.dataset[i].index !== this.activeShape.index
+            //   ) {
+            //     if (
+            //       this.dataset[i].coor[1][0] > this.activeShape.coor[0][0] &&
+            //       this.dataset[i].coor[0][0] < this.activeShape.coor[1][0] &&
+            //       this.dataset[i].coor[1][1] > this.activeShape.coor[0][1] &&
+            //       this.dataset[i].coor[0][1] < this.activeShape.coor[1][1]
+            //     ) {
+            //       this.activeShape.truncated = 1;
+            //     }
+            //   }
+            // }
             this.emit("add", this.activeShape);
           }
         } else if (this.activeShape.type === Shape.Circle) {
@@ -1747,7 +1749,15 @@ export default class CanvasSelect extends EventBus {
    */
   drawRect(shape: Rect, sub?: Record<string, any>) {
     if (shape.coor.length !== 2) return;
-    const { strokeStyle, fillStyle, active, creating, coor, lineWidth } = shape;
+    const {
+      strokeStyle,
+      fillStyle,
+      active,
+      creating,
+      coor,
+      lineWidth,
+      labelType
+    } = shape;
     const [[x0, y0], [x1, y1]] = coor.map((a: Point) =>
       a.map((b) => Math.round(b * this.scale))
     );
@@ -1761,11 +1771,24 @@ export default class CanvasSelect extends EventBus {
         : strokeStyle || this.strokeStyle;
     const w = x1 - x0;
     const h = y1 - y0;
-    if (!creating) this.ctx.fillRect(x0, y0, w, h);
+    if (!creating) {
+      if (labelType === 1) {
+        this.ctx.setLineDash([5, 5]);
+      } else {
+        this.ctx.setLineDash([]);
+      }
+      this.ctx.fillRect(x0, y0, w, h);
+    }
     this.ctx.strokeRect(x0, y0, w, h);
     this.ctx.restore();
     let center = [(coor[1][0] + coor[0][0]) / 2, (coor[1][1] + coor[0][1]) / 2];
-    this.drawLabel(center as Point, shape);
+    if (labelType === 0) {
+      this.drawLabel([coor[0][0], coor[0][1]] as Point, shape, "top");
+    } else if (labelType === 1) {
+      this.drawLabel([coor[1][0], coor[0][1]] as Point, shape, "top");
+    } else {
+      this.drawLabel(center as Point, shape, "center");
+    }
   }
 
   /**
@@ -1855,7 +1878,8 @@ export default class CanvasSelect extends EventBus {
       creating,
       radius,
       ctrlsData,
-      lineWidth
+      lineWidth,
+      labelType
     } = shape;
     const [x, y] = coor.map((a) => a * this.scale);
     this.ctx.save();
@@ -1867,6 +1891,11 @@ export default class CanvasSelect extends EventBus {
         ? this.activeStrokeStyle
         : strokeStyle || this.strokeStyle;
     this.ctx.beginPath();
+    if (labelType === 1) {
+      this.ctx.setLineDash([8, 5]);
+    } else {
+      this.ctx.setLineDash([]);
+    }
     this.ctx.arc(x, y, radius * this.scale, 0, 2 * Math.PI, true);
     this.ctx.fill();
     this.ctx.arc(x, y, radius * this.scale, 0, 2 * Math.PI, true);
@@ -1880,7 +1909,7 @@ export default class CanvasSelect extends EventBus {
    * @param shape 标注实例
    */
   drawLine(shape: Line) {
-    const { strokeStyle, active, creating, coor, lineWidth } = shape;
+    const { strokeStyle, active, creating, coor, lineWidth, labelType } = shape;
     this.ctx.save();
     this.ctx.lineJoin = "round";
     this.ctx.lineWidth = lineWidth || this.lineWidth;
@@ -1888,6 +1917,11 @@ export default class CanvasSelect extends EventBus {
       active || creating
         ? this.activeStrokeStyle
         : strokeStyle || this.strokeStyle;
+    if (labelType === 1) {
+      this.ctx.setLineDash([5, 5]);
+    } else {
+      this.ctx.setLineDash([]);
+    }
     this.ctx.beginPath();
     coor.forEach((el: Point, i) => {
       const [x, y] = el.map((a) => Math.round(a * this.scale));
@@ -1903,7 +1937,11 @@ export default class CanvasSelect extends EventBus {
     }
     this.ctx.stroke();
     this.ctx.restore();
-    this.drawLabel(coor[0], shape);
+    if (labelType === 0) {
+      this.drawLabel(coor[0], shape);
+    } else {
+      this.drawLabel(coor[1], shape);
+    }
   }
 
   hexToRGBA(hex: string, alpha = 0.7) {
@@ -2634,7 +2672,7 @@ export default class CanvasSelect extends EventBus {
    * @param point 位置
    * @param label 文本
    */
-  drawLabel(point: Point, shape: AllShape) {
+  drawLabel(point: Point, shape: AllShape, location: String = "center") {
     const {
       label = "",
       labelFillStyle = "",
@@ -2686,7 +2724,12 @@ export default class CanvasSelect extends EventBus {
     // 以 point 为中心创建 label
     if ([1, 2, 5].includes(shape.type)) {
       x -= labelWidth / 2;
-      y -= labelHeight / 2;
+      if (location === "top") {
+        y -= labelHeight;
+      } else if (location === "bottom") {
+      } else {
+        y -= labelHeight / 2;
+      }
     }
 
     // 计算矩形位置
