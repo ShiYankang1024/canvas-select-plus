@@ -8,8 +8,9 @@ import Grid from "./shape/Grid";
 import Brush from "./shape/Brush";
 import Mask from "./shape/Mask";
 import Pencil from "./shape/Pencil";
+import BrushMask from "./shape/BrushMask";
 export type Point = [number, number];
-export type AllShape = Rect | Polygon | Dot | Line | Circle | Grid | Brush | Mask | Pencil;
+export type AllShape = Rect | Polygon | Dot | Line | Circle | Grid | Brush | Mask | Pencil | BrushMask;
 declare enum Shape {
     None = 0,
     Rect = 1,
@@ -20,7 +21,8 @@ declare enum Shape {
     Grid = 6,
     Brush = 7,
     Mask = 8,
-    Pencil = 9
+    Pencil = 9,
+    BrushMask = 10
 }
 interface MagicPoint {
     coor: [number, number];
@@ -166,6 +168,8 @@ export default class CanvasSelect extends EventBus {
     isEraser: boolean;
     isErasing: boolean;
     eraserPoints: [number, number][];
+    /** 暂存未保存的brush轨迹点 */
+    tempBrushPoints: [number, number][];
     eraserSize: number;
     random_color: {
         r: number;
@@ -204,6 +208,7 @@ export default class CanvasSelect extends EventBus {
     /** 初始化事件 */
     initEvents(): void;
     getscaledPoint(e: MouseEvent): Point;
+    closePolygon: (poly: any[]) => any[][];
     /**
      * 添加/切换图片
      * @param url 图片链接
@@ -350,7 +355,7 @@ export default class CanvasSelect extends EventBus {
     rgbaToHex(rgba: string, includeAlpha?: boolean): string;
     isRGBA(color: string): boolean;
     removeDuplicatePoints(points: [number, number][], getBunding?: boolean, removePoints?: boolean): {
-        resultRect: number[];
+        resultRect: any[];
         resultCoor?: undefined;
     } | {
         resultCoor: [number, number][];
@@ -359,11 +364,15 @@ export default class CanvasSelect extends EventBus {
         resultCoor: [number, number][];
         resultRect?: undefined;
     };
+    relEncodeBinary(x: number, y: number, width: number, height: number): number[];
+    relDecodeBinary(encoded: number[], nonWhiteColor?: string): Uint8ClampedArray;
+    mergeToBrushMask(): BrushMask;
     /**
      * 绘制轨迹
      * @param shape 轨迹实例
      */
     drawBrush(shape: Brush): void;
+    drawBrushMask(shape: BrushMask): void;
     /**
      * 绘制网格
      * @param shape 标注实例

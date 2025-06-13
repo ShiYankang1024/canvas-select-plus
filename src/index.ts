@@ -8,8 +8,10 @@ import Grid from "./shape/Grid";
 import Brush from "./shape/Brush";
 import Mask from "./shape/Mask";
 import Pencil from "./shape/Pencil";
+import BrushMask from "./shape/BrushMask";
 import pkg from "../package.json";
 import { isNested, createUuid, deepClone, deepEqual } from "./tools";
+import * as martinez from "martinez-polygon-clipping";
 
 export type Point = [number, number];
 export type AllShape =
@@ -21,7 +23,8 @@ export type AllShape =
   | Grid
   | Brush
   | Mask
-  | Pencil;
+  | Pencil
+  | BrushMask;
 enum Shape {
   None,
   Rect,
@@ -32,7 +35,8 @@ enum Shape {
   Grid,
   Brush,
   Mask,
-  Pencil
+  Pencil,
+  BrushMask
 }
 
 interface MagicPoint {
@@ -199,6 +203,9 @@ export default class CanvasSelect extends EventBus {
   isErasing = false;
 
   eraserPoints: [number, number][] = [];
+
+  /** 暂存未保存的brush轨迹点 */
+  tempBrushPoints: [number, number][] = [];
 
   eraserSize = 8; // 橡皮擦的半径
 
@@ -475,13 +482,13 @@ export default class CanvasSelect extends EventBus {
                 this.dataset.forEach(
                   (item, i) => (item.active = i === hitShapeIndex)
                 );
-                // if (this.activeShape.boundingRect.length === 0) {
-                //   this.activeShape.boundingRect = this.removeDuplicatePoints(
-                //     hitShape.coor,
-                //     true,
-                //     false
-                //   ).resultRect;
-                // }
+                if (this.activeShape.boundingRect.length === 0) {
+                  this.activeShape.boundingRect = this.removeDuplicatePoints(
+                    hitShape.coor,
+                    true,
+                    false
+                  ).resultRect;
+                }
                 this.emit("select", hitShape);
               }
               return; // 刷子、橡皮檫和钢笔轨迹不可被拖拽
@@ -861,6 +868,9 @@ export default class CanvasSelect extends EventBus {
               true
             );
             this.activeShape.coor = resultCoor;
+            // 使用rle编码
+            // const [x, y, width, height] = resultRect;
+            // console.log("rel:", this.relEncodeBinary(x, y, width, height));
             this.activeShape.boundingRect = resultRect;
             this.emit("add", this.activeShape);
           }
@@ -872,16 +882,67 @@ export default class CanvasSelect extends EventBus {
               `Path points cannot be less than ${this.MIN_POINTNUM}`
             );
           } else {
-            this.activeShape.coor.push([-1, -1]);
             this.ispainting = false;
             this.activeShape.creating = false;
+            for (let i = this.dataset.length - 1; i >= 0; i--) {
+              const item = this.dataset[i];
+              if (
+                item.type === Shape.Pencil &&
+                item.uuid !== this.activeShape.uuid
+              ) {
+                const pencilItem = item as Pencil;
+                const closedPoly1 = this.closePolygon(pencilItem.coor);
+                let closedPoly2 = this.closePolygon(this.activeShape.coor);
+                const intersectionResult = martinez.intersection(
+                  closedPoly1,
+                  closedPoly2
+                );
+                if (intersectionResult && intersectionResult.length > 0) {
+                  // 颜色相同
+                  if (item.strokeStyle === this.activeShape.strokeStyle) {
+                    const unionResult = martinez.union(
+                      closedPoly1,
+                      closedPoly2
+                    );
+                    if (unionResult?.[0]?.[0]) {
+                      this.activeShape.coor = unionResult[0][0];
+                      closedPoly2 = this.closePolygon(this.activeShape.coor);
+                    }
+                    // 从数组中删除当前 item
+                    this.dataset.splice(i, 1);
+                  } else {
+                    // 颜色不同
+                    const bMinusA = martinez.diff(closedPoly2, closedPoly1); // activeShape - pencilItem
+                    if (!bMinusA || bMinusA.length === 0) {
+                      // // activeShape 完全被 pencilItem 包含：将 activeShape 外轮廓添加为 pencilItem 的内孔
+                      // if (!pencilItem.innerCoor) pencilItem.innerCoor = [];
+                      // pencilItem.innerCoor.push(
+                      //   deepClone(this.activeShape.coor)
+                      // );
+                      // // activeShape 保留，pencilItem 添加内孔
+                      continue;
+                    } else {
+                      // activeShape 不包含于 pencilItem，执行 pencilItem - activeShape
+                      const AMinusB = martinez.diff(closedPoly1, closedPoly2);
+                      if (!AMinusB || AMinusB.length === 0) {
+                        this.dataset.splice(i, 1); // pencilItem 完全被 activeShape 吃掉
+                      } else {
+                        pencilItem.coor = AMinusB[0][0]; // pencilItem 保留非交集部分
+                        pencilItem.coor[pencilItem.coor.length - 1] = [-1, -1]; // 添加结束点
+                      }
+                    }
+                  }
+                }
+              }
+            }
+            this.activeShape.coor.push([-1, -1]);
             // 去除重复点
             const { resultCoor, resultRect } = this.removeDuplicatePoints(
               this.activeShape.coor,
-              true
+              false
             );
             this.activeShape.coor = resultCoor;
-            this.activeShape.boundingRect = resultRect;
+            // this.activeShape.boundingRect = resultRect;
             this.emit("add", this.activeShape);
           }
         } else if (this.createType === Shape.Line) {
@@ -1041,6 +1102,16 @@ export default class CanvasSelect extends EventBus {
     return [nx, ny];
   }
 
+  closePolygon = (poly: any[]) => {
+    const closedPoly = poly.filter(
+      (point) => point[0] !== -1 || point[1] !== -1
+    ); // 去掉 (-1, -1)
+    if (closedPoly.length > 0) {
+      closedPoly.push(closedPoly[0]); // 添加首点以闭合路径
+    }
+    return [closedPoly]; // 返回二维数组，符合 martinez 格式
+  };
+
   /**
    * 添加/切换图片
    * @param url 图片链接
@@ -1189,6 +1260,9 @@ export default class CanvasSelect extends EventBus {
                 case Shape.Brush:
                   shape = new Brush(item, index);
                   break;
+                case Shape.BrushMask:
+                  shape = new BrushMask(item, index);
+                  break;
                 case Shape.Mask:
                   shape = await this.handleMaskShape(item, index);
                   break;
@@ -1209,6 +1283,7 @@ export default class CanvasSelect extends EventBus {
                   Shape.Circle,
                   Shape.Grid,
                   Shape.Brush,
+                  Shape.BrushMask,
                   Shape.Mask,
                   Shape.Pencil
                 ].includes(item.type)
@@ -1892,7 +1967,7 @@ export default class CanvasSelect extends EventBus {
         : strokeStyle || this.strokeStyle;
     this.ctx.beginPath();
     if (labelType === 1) {
-      this.ctx.setLineDash([8, 5]);
+      this.ctx.setLineDash([8, 10]);
     } else {
       this.ctx.setLineDash([]);
     }
@@ -2037,10 +2112,10 @@ export default class CanvasSelect extends EventBus {
         if (this.activeShape.type === Shape.Brush) {
           return {
             resultRect: [
-              minX - this.brushlineWidth / 2,
-              minY - this.brushlineWidth / 2,
-              maxX - minX + this.brushlineWidth,
-              maxY - minY + this.brushlineWidth
+              minX - this.activeShape.lineWidth / 2,
+              minY - this.activeShape.lineWidth / 2,
+              maxX - minX + this.activeShape.lineWidth,
+              maxY - minY + this.activeShape.lineWidth
             ]
           };
         } else {
@@ -2083,17 +2158,257 @@ export default class CanvasSelect extends EventBus {
           };
         }
       } else {
-        points.forEach((point) => {
-          // 坐标点去重
+        const epsilon = 5.0;
+        for (const point of points) {
           const key = `${point[0]},${point[1]}`;
-          if (!seen.has(key)) {
-            seen.add(key);
-            uniquePoints.push(point);
+
+          // 去重
+          if (seen.has(key)) continue;
+
+          // 若已有点，判断与前一个的距离
+          const lastPoint = uniquePoints[uniquePoints.length - 1];
+          if (lastPoint) {
+            const dx = point[0] - lastPoint[0];
+            const dy = point[1] - lastPoint[1];
+            const dist = Math.hypot(dx, dy); // 等价于 sqrt(dx² + dy²)
+
+            if (dist < epsilon) continue; // 太近，跳过
           }
-        });
+
+          // 添加点
+          seen.add(key);
+          uniquePoints.push(point);
+        }
         return { resultCoor: uniquePoints };
       }
     }
+  }
+
+  relEncodeBinary(
+    x: number,
+    y: number,
+    width: number,
+    height: number
+  ): number[] {
+    const scaledWidth = Math.round(width * this.scale);
+    const scaledHeight = Math.round(height * this.scale);
+
+    // 1. 读取放大区域原始像素
+    const imageData = this.ctx.getImageData(
+      Math.round(x * this.scale + this.originX),
+      Math.round(y * this.scale + this.originY),
+      scaledWidth,
+      scaledHeight
+    );
+
+    // 2. 创建离屏canvas用于缩放回目标大小 width x height
+    const offscreenBig = document.createElement("canvas");
+    offscreenBig.width = scaledWidth;
+    offscreenBig.height = scaledHeight;
+    const bigCtx = offscreenBig.getContext("2d")!;
+    bigCtx.putImageData(imageData, 0, 0);
+
+    const offscreenSmall = document.createElement("canvas");
+    offscreenSmall.width = width;
+    offscreenSmall.height = height;
+    const smallCtx = offscreenSmall.getContext("2d")!;
+    smallCtx.drawImage(
+      offscreenBig,
+      0,
+      0,
+      scaledWidth,
+      scaledHeight,
+      0,
+      0,
+      width,
+      height
+    );
+
+    // 3. 获取缩放后的像素数据（大小为 width * height）
+    const scaledImageData = smallCtx.getImageData(0, 0, width, height);
+    const pixelData = scaledImageData.data;
+
+    // 4. 进行二值RLE编码（白色0，非白1）
+    const result: number[] = [];
+    let i = 0;
+
+    // canvas的背景透明度<0.25，所以当获取的颜色透明度<0.25时，认为是背景色
+    const isBackground = (idx: number) => pixelData[idx + 3] <= 64;
+
+    while (i < pixelData.length) {
+      const value = isBackground(i) ? 0 : 1;
+      let count = 1;
+
+      while (
+        i + count * 4 < pixelData.length &&
+        (isBackground(i + count * 4) ? 0 : 1) === value
+      ) {
+        count++;
+      }
+
+      // result.push(value, count);
+      result.push(count);
+      i += count * 4;
+    }
+
+    return result;
+  }
+
+  relDecodeBinary(
+    encoded: number[],
+    nonWhiteColor: string = "rgba(0,0,0,1)"
+  ): Uint8ClampedArray {
+    // 解析非白颜色
+    function parseRGBA(colorStr: string): [number, number, number, number] {
+      const inside = colorStr
+        .trim()
+        .replace(/^rgba?\(/, "")
+        .replace(/\)$/, "");
+
+      const parts = inside.split(",").map((s) => s.trim());
+
+      if (parts.length !== 4) {
+        throw new Error("颜色格式错误，应该是 rgba(R,G,B,A)");
+      }
+
+      const r = Number(parts[0]);
+      const g = Number(parts[1]);
+      const b = Number(parts[2]);
+      let a = Number(parts[3]);
+
+      if (
+        [r, g, b].some((c) => isNaN(c) || c < 0 || c > 255) ||
+        isNaN(a) ||
+        a < 0 ||
+        a > 1
+      ) {
+        throw new Error("颜色数值超出范围");
+      }
+
+      a = Math.round(a * 255);
+
+      return [r, g, b, a];
+    }
+
+    const fillColor = parseRGBA(nonWhiteColor);
+
+    // 计算总像素数
+    // let totalPixels = 0;
+    // for (let i = 1; i < encoded.length; i += 2) {
+    //   totalPixels += encoded[i];
+    // }
+
+    // const pixelData = new Uint8ClampedArray(totalPixels * 4);
+
+    // let i = 0;
+    // let dataIndex = 0;
+
+    // while (i < encoded.length) {
+    //   const value = encoded[i];
+    //   const count = encoded[i + 1];
+
+    //   const color = value === 0 ? [0, 0, 0, 0] : fillColor;
+
+    //   for (let j = 0; j < count; j++) {
+    //     pixelData.set(color, dataIndex);
+    //     dataIndex += 4;
+    //   }
+
+    //   i += 2;
+    // }
+    // 计算总像素数
+    let totalPixels = 0;
+    for (let i = 0; i < encoded.length; i++) {
+      totalPixels += encoded[i];
+    }
+
+    const pixelData = new Uint8ClampedArray(totalPixels * 4);
+
+    let i = 0;
+    let dataIndex = 0;
+
+    while (i < encoded.length) {
+      const value = i % 2 === 0 ? 0 : 1;
+      const count = encoded[i];
+
+      const color = value === 0 ? [0, 0, 0, 0] : fillColor;
+
+      for (let j = 0; j < count; j++) {
+        pixelData.set(color, dataIndex);
+        dataIndex += 4;
+      }
+
+      i++;
+    }
+
+    return pixelData;
+  }
+
+  mergeToBrushMask() {
+    let minX = -1,
+      minY = -1,
+      maxX = -1,
+      maxY = -1;
+    let color = "";
+    let tagId = "";
+    let label = "";
+    for (let i = this.dataset.length - 1; i >= 0; i--) {
+      if (this.dataset[i].type === Shape.Brush) {
+        const shape = this.dataset[i] as Brush;
+        const [x0, y0, w, h] = shape.boundingRect;
+        const x1 = x0 + w;
+        const y1 = y0 + h;
+        color = shape.strokeStyle;
+        tagId = shape.tagId;
+        label = shape.label;
+        minX = minX < 0 ? x0 : minX;
+        minY = minY < 0 ? x0 : minY;
+        minX = Math.min(minX, x0);
+        minY = Math.min(minY, y0);
+        maxX = Math.max(maxX, x1);
+        maxY = Math.max(maxY, y1);
+        this.dataset.splice(i, 1);
+      } else if (this.dataset[i].type === Shape.BrushMask) {
+        const shape = this.dataset[i] as BrushMask;
+        const [x0, y0] = shape.startPoint;
+        const x1 = x0 + shape.width;
+        const y1 = y0 + shape.height;
+        color = shape.fillStyle;
+        tagId = shape.tagId;
+        label = shape.label;
+        minX = minX < 0 ? x0 : minX;
+        minY = minY < 0 ? x0 : minY;
+        minX = Math.min(minX, x0);
+        minY = Math.min(minY, y0);
+        maxX = Math.max(maxX, x1);
+        maxY = Math.max(maxY, y1);
+        this.dataset.splice(i, 1);
+      }
+    }
+    const brushMask = new BrushMask(
+      {
+        encodePixelData: this.relEncodeBinary(
+          minX - 1,
+          minY - 1,
+          maxX - minX + 2,
+          maxY - minY + 2
+        ), // 示例的编码数据
+        startPoint: [minX - 1, minY - 1], // 示例的起始点
+        width: maxX - minX + 2, // 宽度
+        height: maxY - minY + 2, // 高度
+        fillStyle: color,
+        tagId: tagId,
+        label: label
+      },
+      this.dataset.length
+    );
+    console.log(brushMask);
+    // this.dataset.push(brushMask);
+    this.dataset.forEach((item, i) => {
+      item.index = i;
+    });
+    this.update();
+    return brushMask;
   }
 
   /**
@@ -2144,8 +2459,8 @@ export default class CanvasSelect extends EventBus {
 
       this.ctx.stroke();
 
-      // if (active && this.activeShape.boundingRect.length > 0) {
-      //   const [x, y, w, h] = this.activeShape.boundingRect;
+      // if (active && boundingRect.length > 0) {
+      //   const [x, y, w, h] = boundingRect;
       //   this.ctx.lineWidth = 1;
       //   this.ctx.strokeStyle = this.activeStrokeStyle;
       //   this.ctx.beginPath();
@@ -2154,6 +2469,36 @@ export default class CanvasSelect extends EventBus {
       // }
     }
     this.ctx.restore();
+  }
+
+  drawBrushMask(shape: BrushMask) {
+    const { encodePixelData, startPoint, height, width, fillStyle } = shape;
+
+    // 1. 解码得到原始大小的像素数据（未缩放）
+    const pixelData = this.relDecodeBinary(encodePixelData, fillStyle);
+
+    // 2. 创建 ImageData，大小是原始 width, height
+    const imageData = new ImageData(pixelData, width, height);
+
+    // 3. 创建离屏 canvas，绘制 ImageData
+    const offCanvas = document.createElement("canvas");
+    offCanvas.width = width;
+    offCanvas.height = height;
+    const offCtx = offCanvas.getContext("2d");
+    offCtx.putImageData(imageData, 0, 0);
+
+    // 4. 将离屏 canvas 绘制到目标 ctx，并通过 drawImage 缩放
+    this.ctx.drawImage(
+      offCanvas,
+      0,
+      0,
+      width,
+      height,
+      startPoint[0] * this.scale,
+      startPoint[1] * this.scale,
+      width * this.scale,
+      height * this.scale
+    );
   }
 
   /**
@@ -2593,77 +2938,91 @@ export default class CanvasSelect extends EventBus {
    * @returns
    */
   drawPencil(shape: Pencil) {
-    const { strokeStyle, fillStyle, active, creating, coor, lineWidth } = shape;
+    const {
+      strokeStyle,
+      fillStyle,
+      active,
+      creating,
+      coor,
+      // innerCoor,
+      lineWidth
+    } = shape;
 
-    // 保存上下文状态
     this.ctx.save();
 
-    // 设置绘制样式
-    this.ctx.lineJoin = "round"; // 线条连接处圆角处理
-    this.ctx.lineCap = "round"; // 线条端点圆角处理
-    this.ctx.lineWidth = lineWidth || this.pencillineWidth; // 设置线条宽度
+    this.ctx.lineJoin = "round";
+    this.ctx.lineCap = "round";
+    this.ctx.lineWidth = lineWidth || this.pencillineWidth;
 
-    // 设置颜色，包含透明度
-    this.ctx.strokeStyle =
+    const strokeColor =
       active || creating
         ? this.activeStrokeStyle
         : strokeStyle || this.pencilstrokeStyle;
-    this.ctx.fillStyle =
+    const fillColor =
       active || creating
         ? this.activeFillStyle
         : fillStyle || this.pencilstrokeStyle;
 
-    // 应用缩放
     this.ctx.scale(this.scale, this.scale);
 
-    // 如果有足够的点进行绘制
-    if (coor.length > 1) {
-      // 检查是否有结束标志点 (-1, -1)
-      const hasEndPoint = coor.some(
-        (point) => point[0] === -1 && point[1] === -1
-      );
+    this.ctx.beginPath();
 
-      // 过滤掉结束标志点
-      const validCoor = coor.filter(
-        (point) => !(point[0] === -1 && point[1] === -1)
-      );
+    // --- 检查是否已完成（包含 -1, -1）
+    const isClosed = coor.some((pt) => pt[0] === -1 && pt[1] === -1);
 
-      if (validCoor.length > 1) {
-        // 设置全局组合操作
-        this.ctx.globalCompositeOperation = "source-over"; // 默认绘制模式
+    // --- 分段绘制函数 ---
+    const drawPathSegments = (points: [number, number][]) => {
+      let segment: [number, number][] = [];
 
-        // 开始路径
-        this.ctx.beginPath();
-        this.ctx.moveTo(validCoor[0][0], validCoor[0][1]); // 从第一个点开始
-
-        // 遍历有效坐标绘制线段
-        for (let i = 1; i < validCoor.length; i++) {
-          this.ctx.lineTo(validCoor[i][0], validCoor[i][1]); // 绘制到下一个点
-        }
-
-        // 如果有结束标志点，则首尾相连
-        if (hasEndPoint) {
-          this.ctx.closePath(); // 首尾相连
+      for (const point of points) {
+        if (point[0] === -1 && point[1] === -1) {
+          if (segment.length > 1) {
+            this.ctx.moveTo(segment[0][0], segment[0][1]);
+            for (let i = 1; i < segment.length; i++) {
+              this.ctx.lineTo(segment[i][0], segment[i][1]);
+            }
+            this.ctx.closePath();
+          }
+          segment = [];
+        } else {
+          segment.push(point);
         }
       }
 
-      // if (active && this.activeShape.boundingRect.length > 0) {
-      //   const [x, y, w, h] = this.activeShape.boundingRect;
-      //   this.ctx.lineWidth = 1;
-      //   this.ctx.strokeStyle = this.activeStrokeStyle;
-      //   this.ctx.strokeRect(x, y, w, h);
-      // }
-
-      // 绘制路径
-      this.ctx.stroke();
-
-      // 如果路径闭合，填充封闭区域
-      if (hasEndPoint) {
-        this.ctx.clip(); // 限制填充区域到路径范围
-        this.ctx.fill();
+      // 最后一段（未结束）
+      if (segment.length > 1) {
+        this.ctx.moveTo(segment[0][0], segment[0][1]);
+        for (let i = 1; i < segment.length; i++) {
+          this.ctx.lineTo(segment[i][0], segment[i][1]);
+        }
+        if (isClosed) this.ctx.closePath(); // 仅当闭合才首尾闭合
       }
+    };
+
+    // --- 绘制 coor 主路径 ---
+    if (coor?.length) {
+      drawPathSegments(coor);
     }
-    // 恢复上下文状态
+
+    // // --- 绘制 innerCoor 镂空路径（仅当已闭合）---
+    // if (isClosed && innerCoor && Array.isArray(innerCoor)) {
+    //   for (const hole of innerCoor) {
+    //     if (hole?.length) {
+    //       drawPathSegments(hole);
+    //     }
+    //   }
+    // }
+
+    // --- 仅闭合状态下填充 ---
+    if (isClosed) {
+      this.ctx.fillStyle = fillColor;
+      this.ctx.fill("evenodd");
+    }
+
+    // 始终描边
+    this.ctx.strokeStyle = strokeColor;
+    this.ctx.stroke();
+
     this.ctx.restore();
   }
 
@@ -2847,6 +3206,9 @@ export default class CanvasSelect extends EventBus {
             break;
           case Shape.Brush:
             this.drawBrush(shape as Brush);
+            break;
+          case Shape.BrushMask:
+            this.drawBrushMask(shape as BrushMask);
             break;
           case Shape.Mask:
             this.drawMask(shape as Mask);
