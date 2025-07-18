@@ -373,7 +373,8 @@ export default class CanvasSelect extends EventBus {
         if (
           this.activeShape.type === Shape.Polygon &&
           this.activeShape.coor.length > 2 &&
-          this.ctrlIndex === 0
+          this.ctrlIndex === 0 &&
+          this.activeShape.creating
         ) {
           this.handleDblclick(e);
         } else {
@@ -990,7 +991,7 @@ export default class CanvasSelect extends EventBus {
       const canLine =
         this.activeShape.type === Shape.Line &&
         this.activeShape.coor.length > 1;
-      if (canPolygon || canLine) {
+      if ((canPolygon || canLine) && this.activeShape.creating) {
         this.emit("add", this.activeShape);
         this.activeShape.creating = false;
         this.update();
@@ -1871,7 +1872,15 @@ export default class CanvasSelect extends EventBus {
    * @param shape 标注实例
    */
   drawPolygon(shape: Polygon) {
-    const { strokeStyle, fillStyle, active, creating, coor, lineWidth } = shape;
+    const {
+      strokeStyle,
+      fillStyle,
+      active,
+      creating,
+      coor,
+      lineWidth,
+      labelType
+    } = shape;
     this.ctx.save();
     this.ctx.lineJoin = "round";
     this.ctx.lineWidth = lineWidth || this.lineWidth;
@@ -1881,6 +1890,11 @@ export default class CanvasSelect extends EventBus {
       active || creating
         ? this.activeStrokeStyle
         : strokeStyle || this.strokeStyle;
+    if (labelType === 1) {
+      this.ctx.setLineDash([5, 5]);
+    } else {
+      this.ctx.setLineDash([]);
+    }
     this.ctx.beginPath();
     coor.forEach((el: Point, i) => {
       const [x, y] = el.map((a) => Math.round(a * this.scale));
@@ -2908,8 +2922,14 @@ export default class CanvasSelect extends EventBus {
       !this.readonly
     ) {
       const [x, y] = this.activeShape.coor[this.clickIndex];
-      const nx = Math.round(x + 3);
-      const ny = Math.round(y + 3);
+      let nx = Math.ceil(x + 5);
+      let ny = Math.ceil(y + 5);
+      if (nx > this.IMAGE_ORIGIN_WIDTH) {
+        nx = Math.ceil(x - 5);
+      }
+      if (ny > this.IMAGE_ORIGIN_HEIGHT) {
+        ny = Math.ceil(y - 5);
+      }
       shape.coor.splice(this.clickIndex + 1, 0, [nx, ny]);
       this.clickIndex++;
       this.update();
@@ -3163,15 +3183,15 @@ export default class CanvasSelect extends EventBus {
                 this.IMAGE_HEIGHT
               );
             } else {
-              this.ctx.globalAlpha = this.imagealpha;
-              this.ctx.drawImage(
-                this.image,
-                0,
-                0,
-                this.IMAGE_WIDTH,
-                this.IMAGE_HEIGHT
-              );
-              this.ctx.globalAlpha = 1.0;
+              // this.ctx.globalAlpha = this.imagealpha;
+              // this.ctx.drawImage(
+              //   this.image,
+              //   0,
+              //   0,
+              //   this.IMAGE_WIDTH,
+              //   this.IMAGE_HEIGHT
+              // );
+              // this.ctx.globalAlpha = 1.0;
             }
           }
         }
