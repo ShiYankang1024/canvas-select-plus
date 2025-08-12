@@ -338,7 +338,9 @@ export default class CanvasSelect extends EventBus {
       } else {
         this.textscaleStep--;
       }
+      // console.log("e.deltaY",e.deltaY);
       this.setScale(e.deltaY < 0, true);
+      this.emit("scale", { type: e.deltaY < 0, byMouse: true, pure: false });
     }
   }
 
@@ -3326,7 +3328,7 @@ export default class CanvasSelect extends EventBus {
    * @param color string
    */
   updateLabelByIndex(
-    index: number,
+    index: number[],
     tagId: string,
     label: string,
     color: string,
@@ -3355,12 +3357,13 @@ export default class CanvasSelect extends EventBus {
         }
       });
     };
-
-    if (index !== -1) {
-      updateProperties(this.dataset[index]);
-      if (this.dataset[index].type === Shape.Pencil) {
-        this.emit("updateLabel", this.dataset[index]);
-      }
+    if (index && index.length!==0) {
+      index.forEach(i=>{
+        updateProperties(this.dataset[i]);
+        if (this.dataset[i].type === Shape.Pencil) {
+          this.emit("updateLabel", this.dataset[i]);
+        }
+      });
     } else {
       // 注意:不能使用if(this.activeShape)判断，会始终为true
       if (Object.keys(this.activeShape).length !== 0) {
@@ -3638,6 +3641,7 @@ export default class CanvasSelect extends EventBus {
       realToRight = (y - this.originY) / this.scale;
     }
     const abs = Math.abs(this.scaleStep);
+    // console.log("abs", abs);
     const width = this.IMAGE_WIDTH;
     this.IMAGE_WIDTH = Math.round(
       this.IMAGE_ORIGIN_WIDTH * (this.scaleStep >= 0 ? 1.1 : 0.9) ** abs
@@ -3653,7 +3657,6 @@ export default class CanvasSelect extends EventBus {
       this.originX = this.WIDTH / 2 - (this.WIDTH / 2 - this.originX) * scale;
       this.originY = this.HEIGHT / 2 - (this.HEIGHT / 2 - this.originY) * scale;
     }
-    this.emit("scale", { type: type, byMouse: byMouse, pure: pure });
     if (!pure) {
       this.update();
     }

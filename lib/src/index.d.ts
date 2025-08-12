@@ -445,7 +445,7 @@ export default class CanvasSelect extends EventBus {
      * @param label string
      * @param color string
      */
-    updateLabelByIndex(index: number, tagId: string, label: string, color: string, properties: string[]): void;
+    updateLabelByIndex(index: number[], tagId: string, label: string, color: string, properties: string[]): void;
     /**
      * 删除画布中创建的所有图形
      * @param index number
