@@ -122,7 +122,7 @@ export default class CanvasSelect extends EventBus {
 
   offScreenCtx: CanvasRenderingContext2D;
   /** 记录锚点距离 */
-  remmber: number[][];
+  remmber: number[][] = [];
   /** 记录鼠标位置 */
   mouse: Point;
   /** 记录背景图鼠标位移 */
@@ -972,12 +972,17 @@ export default class CanvasSelect extends EventBus {
         "remark",
         "length"
       ];
-      // console.log(deepEqual(this.olddataset, this.dataset, condition));
-      // console.log("this.olddataset", this.olddataset);
-      // console.log("this.dataset", this.dataset);
       if (!deepEqual(this.olddataset, this.dataset, condition)) {
-        this.manageDoneList(deepClone(this.dataset));
-        console.log("this.doneList", this.doneList);
+        // 绘制后未标注前的状态不保存
+        if(this.activeShape.type=== Shape.Rect){
+          if(Object.keys(this.activeShape).length !== 0&&this.activeShape.tagId!=="" ){
+            this.manageDoneList(deepClone(this.dataset));
+            console.log("this.doneList", this.doneList);
+          }
+        }else{
+          this.manageDoneList(deepClone(this.dataset));
+          console.log("this.doneList", this.doneList);
+        }
       }
     }
   }
@@ -3317,7 +3322,6 @@ export default class CanvasSelect extends EventBus {
       });
       this.update();
       this.manageDoneList(deepClone(this.dataset));
-      // this.manageDoneList(deepClone(this.dataset));
     }
   }
 
@@ -3711,6 +3715,7 @@ export default class CanvasSelect extends EventBus {
     if (this.doneList.length > this.MAX_LENGTH) {
       this.doneList.shift();
     }
+    console.log("this.doneList", this.doneList);
   }
 
   /**
@@ -3724,6 +3729,11 @@ export default class CanvasSelect extends EventBus {
       this.undoList.push(lastDoneItem);
       this.doneList.pop();
       const newShapes = deepClone(this.doneList[this.doneList.length - 1]);
+      const shape = newShapes.find(item=>item.active===true);
+      if(shape&&shape.strokeStyle){
+        this.activeStrokeStyle = shape.strokeStyle;
+        this.activeFillStyle = this.hexToRGBA(shape.strokeStyle,0.2);
+      }
       this.setData(newShapes, false);
     }
   }
@@ -3738,6 +3748,11 @@ export default class CanvasSelect extends EventBus {
       this.manageDoneList(lastDoneItem);
       this.undoList.pop();
       const newShapes = deepClone(this.doneList[this.doneList.length - 1]);
+      const shape = newShapes.find(item=>item.active===true);
+      if(shape&&shape.strokeStyle){
+        this.activeStrokeStyle = shape.strokeStyle;
+        this.activeFillStyle = this.hexToRGBA(shape.strokeStyle,0.2);
+      }
       this.setData(newShapes, false);
     }
   }
